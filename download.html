@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<title>Downloads — Let-S APK Builder</title>
+<link rel="stylesheet" href="assets/style.css?v=4" />
+<style>
+  .dl-item {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .dl-item:last-child { border-bottom: none; }
+
+  .dl-item .info {
+    display: flex; flex-direction: column; gap: 4px;
+    flex: 1; min-width: 200px;
+  }
+  .dl-item .app-name { font-weight: 700; font-size: 15px; color: var(--text); }
+  .dl-item .sub { color: var(--muted); font-size: 12px; word-break: break-all; }
+  .dl-item .pkg { color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; }
+
+  .dl-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 18px;
+    background: var(--success);
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .dl-btn:hover { background: #2fb578; }
+  .dl-btn:active { transform: translateY(1px); }
+
+  .copy-btn {
+    padding: 8px 12px;
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { color: var(--text); }
+
+  .empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--success); color: #fff;
+    padding: 12px 20px; border-radius: 10px;
+    font-size: 14px; font-weight: 600;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s;
+    z-index: 1000;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="brand">Let-S <span>APK Builder</span></div>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="build.html">Build</a>
+    <a href="builds.html">My Builds</a>
+    <a href="downloads.html" class="active">Downloads</a>
+  </nav>
+</header>
+
+<main class="container">
+  <h1 style="margin-bottom:6px;">📥 Download APKs</h1>
+  <p style="color:var(--muted);margin-top:0;">
+    All completed builds. Click download — no polling, no waiting.
+  </p>
+
+  <div style="margin-bottom:12px;">
+    <button class="btn secondary" onclick="loadBuilds()">🔄 Refresh list</button>
+  </div>
+
+  <div class="card">
+    <div id="listBody">
+      <div class="empty">Loading builds…</div>
+    </div>
+  </div>
+</main>
+
+<div id="toast" class="toast">Link copied!</div>
+
+<script>
+  // ⚠️ Update this if backend URL changes
+  const API_BASE = "https://lets-apk-builder.onrender.com";
+
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[<>&"']/g, (c) => ({
+      "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;"
+    }[c] || c));
+  }
+
+  function formatDate(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString();
+    } catch {
+      return iso;
+    }
+  }
+
+  async function loadBuilds() {
+    const body = document.getElementById("listBody");
+    body.innerHTML = `<div class="empty">Loading builds…</div>`;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/builds?limit=50&_=${Date.now()}`);
+      if (!res.ok) throw new Error(`API returned ${res.status}`);
+      const data = await res.json();
+      const builds = data.builds || [];
+
+      // Only show completed builds with apkUrl
+      const downloadable = builds.filter(b => b.status === "completed" && b.apkUrl);
+
+      if (!downloadable.length) {
+        body.innerHTML = `
+          <div class="empty">
+            No completed APKs yet.<br><br>
+            <a href="build.html" class="btn">Build an APK →</a>
+          </div>`;
+        return;
+      }
+
+      body.innerHTML = downloadable.map(b => {
+        const cfg = b.config || {};
+        const appName = cfg.appName || "(untitled)";
+        const pkg = cfg.packageName || "";
+        const version = cfg.versionName || "";
+        const date = formatDate(b.completedAt || b.createdAt);
+        const downloadUrl = `${API_BASE}/api/download/${b.id}`;
+        const directUrl = b.apkUrl;
+
+        return `
+          <div class="dl-item">
+            <div class="info">
+              <span class="app-name">${escapeHtml(appName)} ${version ? `v${escapeHtml(version)}` : ""}</span>
+              <span class="sub">Built: ${escapeHtml(date)}</span>
+              ${pkg ? `<span class="pkg">${escapeHtml(pkg)}</span>` : ""}
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <a class="dl-btn" href="${escapeHtml(downloadUrl)}" download>⬇ Download</a>
+              <button class="copy-btn" onclick="copyLink('${escapeHtml(directUrl)}')">Copy link</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+    } catch (err) {
+      body.innerHTML = `<div class="empty" style="color:var(--danger);">
+        ❌ Failed to load: ${escapeHtml(err.message)}<br><br>
+        <button class="btn secondary" onclick="loadBuilds()">Retry</button>
+      </div>`;
+    }
+  }
+
+  function copyLink(url) {
+    navigator.clipboard.writeText(url).then(() => {
+      const t = document.getElementById("toast");
+      t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 1500);
+    }).catch(() => {
+      // Fallback for older browsers
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      const t = document.getElementById("toast");
+      t.classList.add("show");
+      setTimeout(() => t.classList.remove("show"), 1500);
+    });
+  }
+
+  // Initial load
+  loadBuilds();
+</script>
+</body>
+</html>
