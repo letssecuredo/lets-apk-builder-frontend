@@ -107,19 +107,15 @@
   const currentStep = document.getElementById("currentStep");
   const currentStepName = document.getElementById("currentStepName");
 
-  // Define all steps in order
+  // ⚠️ MUST MATCH workflow build-apk.yml STEP_INDEX values
   const STEPS = [
-    { index: 1,  name: "Received job" },
-    { index: 2,  name: "Checked out repository" },
-    { index: 3,  name: "Node.js ready" },
-    { index: 4,  name: "Java 17 ready" },
-    { index: 5,  name: "Android SDK ready" },
-    { index: 6,  name: "Android build tools installed" },
-    { index: 7,  name: "Configuration loaded" },
-    { index: 8,  name: "Android project generated" },
-    { index: 9,  name: "APK compiled with Gradle" },
-    { index: 10, name: "APK signed with keystore" },
-    { index: 11, name: "Uploaded to GitHub Releases" },
+    { index: 1, name: "Received job" },
+    { index: 2, name: "Android SDK ready" },
+    { index: 3, name: "Configuration loaded" },
+    { index: 4, name: "Android project generated" },
+    { index: 5, name: "APK compiled with Gradle" },
+    { index: 6, name: "APK signed with keystore" },
+    { index: 7, name: "Uploaded to GitHub Releases" },
   ];
 
   const PCT = { queued: 5, building: 50, signing: 75, uploading: 90, completed: 100, failed: 100 };
@@ -128,7 +124,7 @@
     msg.innerHTML = `<div class="error-box">Missing buildId in URL.</div>`;
   } else {
     buildIdLabel.textContent = `ID: ${id}`;
-    renderSteps(-1, "pending");  // initial render
+    renderSteps(0, "queued");
     poll();
   }
 
@@ -149,9 +145,18 @@
   function renderSteps(activeIndex, status) {
     stepList.innerHTML = STEPS.map(s => {
       let cls = "pending";
-      if (status === "failed" && s.index === activeIndex + 1) cls = "failed";
-      else if (s.index <= activeIndex) cls = "done";
-      else if (s.index === activeIndex + 1) cls = "active";
+
+      if (status === "completed") {
+        cls = "done";
+      } else if (status === "failed") {
+        if (s.index < activeIndex) cls = "done";
+        else if (s.index === activeIndex) cls = "failed";
+        else cls = "pending";
+      } else {
+        if (s.index < activeIndex) cls = "done";
+        else if (s.index === activeIndex) cls = "active";
+        else cls = "pending";
+      }
 
       const icon = cls === "done" ? "✓" : cls === "active" ? "●" : cls === "failed" ? "✕" : s.index;
       return `<li class="step ${cls}">
@@ -166,13 +171,13 @@
     statusPill.textContent = b.status;
     progressBar.style.width = (PCT[b.status] || 5) + "%";
 
-    // Steps rendering
     const stepIndex = b.stepIndex || 0;
+
     if (b.status === "completed") {
-      renderSteps(11, "completed");
+      renderSteps(STEPS.length, "completed");
       currentStep.style.display = "none";
     } else if (b.status === "failed") {
-      renderSteps(stepIndex, "failed");
+      renderSteps(stepIndex || 1, "failed");
       currentStep.style.display = "none";
     } else if (stepIndex > 0) {
       renderSteps(stepIndex, "building");
