@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head><title>Test</title></head>
+<body>
+<h1>Testing API...</h1>
+<pre id="out">Loading...</pre>
+<script>
+fetch("https://lets-apk-builder.onrender.com/api/build/5c025afb-fc13-4e37-8799-9621772ac2b8")
+  .then(r => r.json())
+  .then(d => {
+    document.getElementById("out").textContent = JSON.stringify(d, null, 2);
+    if (d.status === "completed" && d.apkUrl) {
+      const a = document.createElement("a");
+      a.href = "https://lets-apk-builder.onrender.com/api/download/" + d.id;
+      a.textContent = "⬇ DOWNLOAD APK";
+      a.style.cssText = "font-size:24px;color:green;display:block;margin:20px";
+      document.body.appendChild(a);
+    }
+  })
+  .catch(e => document.getElementById("out").textContent = "ERROR: " + e.message);
+</script>
+</body>
+</html>
