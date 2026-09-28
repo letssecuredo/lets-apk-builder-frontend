@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <title>Build an APK — Let-S APK Builder</title>
-<link rel="stylesheet" href="assets/style.css?v=8" />
+<link rel="stylesheet" href="assets/style.css?v=9" />
 <style>
   .icon-drop { position:relative; border:2px dashed var(--border); border-radius:12px; padding:20px; text-align:center; background:var(--bg-2); transition:.15s; cursor:pointer; }
   .icon-drop:hover,.icon-drop.dragover { border-color:var(--accent); background:rgba(31,111,235,.06); }
@@ -43,6 +43,27 @@
   .perm-actions { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
   .perm-actions button { font-size:11px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--muted); cursor:pointer; }
   .perm-actions button:hover { color:var(--text); border-color:var(--accent-2); }
+
+  /* Mode selector */
+  .mode-grid { display:grid; grid-template-columns:1fr; gap:10px; margin-top:10px; }
+  @media (min-width:640px) { .mode-grid { grid-template-columns:repeat(3, 1fr); } }
+  .mode-card {
+    display:flex; flex-direction:column; gap:6px;
+    padding:14px; border:2px solid var(--border); border-radius:12px;
+    background:var(--bg-2); cursor:pointer;
+    transition:border-color .15s, background .15s;
+    position:relative;
+  }
+  .mode-card:hover { border-color:rgba(99,161,255,.4); }
+  .mode-card.selected { border-color:var(--accent); background:rgba(31,111,235,.08); }
+  .mode-card input[type="radio"] { position:absolute; opacity:0; pointer-events:none; }
+  .mode-card .mode-icon { font-size:22px; }
+  .mode-card .mode-name { font-size:14px; font-weight:700; color:var(--text); }
+  .mode-card .mode-desc { font-size:11px; color:var(--muted); line-height:1.4; }
+
+  .field-hidden { display:none !important; }
+  .req-badge { font-size:10px; color:var(--danger); margin-left:6px; font-weight:600; }
+  .opt-badge { font-size:10px; color:var(--muted); margin-left:6px; font-weight:500; }
 </style>
 </head>
 <body>
@@ -58,12 +79,43 @@
 
 <main class="container">
   <h1 style="margin-bottom:6px;">New build</h1>
-  <p style="color:var(--muted);margin-top:0;">Fill in the details below. Pick the permissions your app needs.</p>
+  <p style="color:var(--muted);margin-top:0;">Choose app mode, then fill the details. Pick the permissions your app needs.</p>
 
   <form id="buildForm" class="card" novalidate>
+    <!-- ═══════════ APP MODE ═══════════ -->
+    <div style="margin-bottom:20px;">
+      <label>App mode</label>
+      <div class="mode-grid" id="modeGrid">
+        <label class="mode-card selected" data-mode="hybrid">
+          <input type="radio" name="appMode" value="hybrid" checked />
+          <span class="mode-icon">🔀</span>
+          <span class="mode-name">Hybrid</span>
+          <span class="mode-desc">Online site + offline fallback</span>
+        </label>
+        <label class="mode-card" data-mode="online">
+          <input type="radio" name="appMode" value="online" />
+          <span class="mode-icon">🌐</span>
+          <span class="mode-name">Online only</span>
+          <span class="mode-desc">Always loads live URL</span>
+        </label>
+        <label class="mode-card" data-mode="offline">
+          <input type="radio" name="appMode" value="offline" />
+          <span class="mode-icon">📴</span>
+          <span class="mode-name">Offline only</span>
+          <span class="mode-desc">Bundled files, no internet</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- ═══════════ BASIC INFO ═══════════ -->
     <div class="grid-2">
       <div><label for="appName">App name</label><input id="appName" name="appName" type="text" placeholder="My App" maxlength="50" required /></div>
-      <div><label for="websiteUrl">Website URL</label><input id="websiteUrl" name="websiteUrl" type="url" placeholder="https://example.com" required /></div>
+      <div id="urlField">
+        <label for="websiteUrl">
+          Website URL<span id="urlBadge" class="req-badge">required</span>
+        </label>
+        <input id="websiteUrl" name="websiteUrl" type="url" placeholder="https://example.com" />
+      </div>
       <div><label for="packageName">Package name</label><input id="packageName" name="packageName" type="text" value="com.example.myapp" required /></div>
       <div><label for="versionName">Version name</label><input id="versionName" name="versionName" type="text" value="1.0.0" required /></div>
       <div><label for="versionCode">Version code</label><input id="versionCode" name="versionCode" type="number" min="1" value="1" required /></div>
@@ -76,7 +128,7 @@
       </div>
     </div>
 
-    <!-- Icon -->
+    <!-- ═══════════ APP ICON ═══════════ -->
     <div style="margin-top:20px;">
       <label for="iconFile">App icon</label>
       <div class="icon-drop" id="iconDrop">
@@ -90,20 +142,23 @@
       </div>
     </div>
 
-    <!-- Offline ZIP -->
-    <div style="margin-top:20px;">
-      <label>Offline mode (optional)</label>
+    <!-- ═══════════ OFFLINE ZIP ═══════════ -->
+    <div style="margin-top:20px;" id="zipField">
+      <label>
+        Offline bundle (ZIP)<span id="zipBadge" class="req-badge">required</span>
+      </label>
       <div class="icon-drop" id="zipDrop">
         <input id="offlineZip" type="file" accept=".zip,application/zip" />
         <p class="hint">
-          <strong>Tap to choose</strong> a ZIP of your website<br>
-          <span style="font-size:11px;">Bundle site files for offline use · max 3 MB · index.html required at root</span>
+          <strong>Tap to choose</strong> a ZIP of your static site<br>
+          <span style="font-size:11px;">Max 3 MB · index.html must be at ZIP root</span>
         </p>
       </div>
       <p id="zipStatus" class="icon-status"></p>
       <div id="zipInfo" style="display:none;margin-top:8px;font-size:12px;color:var(--success);text-align:center;"></div>
     </div>
 
+    <!-- ═══════════ ORIENTATION ═══════════ -->
     <div style="margin-top:16px;">
       <label>Orientation</label>
       <label style="display:flex;gap:8px;align-items:center;color:var(--text);font-size:14px;"><input type="radio" name="orientation" value="portrait" checked /> Portrait</label>
@@ -111,6 +166,7 @@
       <label style="display:flex;gap:8px;align-items:center;color:var(--text);font-size:14px;"><input type="radio" name="orientation" value="auto" /> Auto</label>
     </div>
 
+    <!-- ═══════════ PERMISSIONS ═══════════ -->
     <div class="perm-section">
       <label>Permissions &amp; features</label>
       <div class="perm-actions">
@@ -130,120 +186,141 @@
   </form>
 </main>
 
-<script src="assets/app.js?v=8"></script>
+<script src="assets/app.js?v=9"></script>
 <script>
   // ═══════════════════════════════════════════════════════════════
-  // PERMISSION DEFINITIONS
+  // APP MODE — show/hide fields based on selection
   // ═══════════════════════════════════════════════════════════════
-  const PERMISSION_CATEGORIES = [
-    {
-      icon: "🌐", name: "Internet & Network",
-      perms: [
-        { key: "enableJs", label: "JavaScript", desc: "Required for modern websites", default: true },
-        { key: "enableNetworkState", label: "Network state", desc: "Detect if device is online", default: true },
-      ],
-    },
-    {
-      icon: "📷", name: "Media",
-      perms: [
-        { key: "enableCamera", label: "Camera", desc: "Video calls, QR scan, photo capture", level: "warn" },
-        { key: "enableMicrophone", label: "Microphone", desc: "Voice search, calls, audio recording", level: "warn" },
-        { key: "enableAudioSettings", label: "Modify audio settings", desc: "Change volume, audio modes" },
-        { key: "enableFileUpload", label: "File upload", desc: "Let users upload files from device", default: true },
-      ],
-    },
-    {
-      icon: "📍", name: "Location",
-      perms: [
-        { key: "enableGeolocation", label: "Precise location", desc: "GPS-based location", level: "warn" },
-        { key: "enableCoarseLocation", label: "Approximate location", desc: "Network-based location", level: "warn" },
-        { key: "enableBackgroundLocation", label: "Background location", desc: "Location even when app is closed", level: "danger" },
-      ],
-    },
-    {
-      icon: "💾", name: "Storage",
-      perms: [
-        { key: "enableReadMediaImages", label: "Read media images", desc: "Access photos (Android 13+)" },
-        { key: "enableReadMediaVideo", label: "Read media video", desc: "Access videos (Android 13+)" },
-        { key: "enableReadMediaAudio", label: "Read media audio", desc: "Access music (Android 13+)" },
-        { key: "enableStorage", label: "External storage (legacy)", desc: "Read/write on Android ≤12" },
-      ],
-    },
-    {
-      icon: "🔗", name: "Bluetooth & Nearby",
-      perms: [
-        { key: "enableBluetooth", label: "Bluetooth (modern)", desc: "Scan/connect to BT devices (12+)", level: "warn" },
-        { key: "enableBluetoothLegacy", label: "Bluetooth (legacy)", desc: "For Android ≤11 devices" },
-        { key: "enableNfc", label: "NFC", desc: "Read/write NFC tags" },
-        { key: "enableNearbyWifi", label: "Nearby WiFi devices", desc: "Discover nearby devices (13+)", level: "warn" },
-      ],
-    },
-    {
-      icon: "📶", name: "WiFi & Network Control",
-      perms: [
-        { key: "enableWifi", label: "Read WiFi state", desc: "View current WiFi info" },
-        { key: "enableChangeWifi", label: "Change WiFi state", desc: "Enable/disable WiFi" },
-        { key: "enableChangeNetwork", label: "Change network state", desc: "Enable/disable data" },
-      ],
-    },
-    {
-      icon: "📳", name: "Device Features",
-      perms: [
-        { key: "enableVibration", label: "Vibration", desc: "Haptic feedback on button press" },
-        { key: "enableWakeLock", label: "Wake lock", desc: "Keep screen on during video/reading" },
-        { key: "enableFlashlight", label: "Flashlight", desc: "Camera LED torch" },
-        { key: "enableBodySensors", label: "Body sensors", desc: "Heart rate, step count", level: "warn" },
-        { key: "enableActivityRecognition", label: "Activity recognition", desc: "Detect walking/driving", level: "warn" },
-      ],
-    },
-    {
-      icon: "📞", name: "Phone & Contacts",
-      perms: [
-        { key: "enableReadPhoneState", label: "Read phone state", desc: "Device ID, network info", level: "warn" },
-        { key: "enableCallPhone", label: "Call phone", desc: "Directly call numbers", level: "danger" },
-        { key: "enableReadContacts", label: "Read contacts", desc: "Access contact list", level: "danger" },
-        { key: "enableWriteContacts", label: "Write contacts", desc: "Modify contact list", level: "danger" },
-        { key: "enableGetAccounts", label: "Get accounts", desc: "Access Google/system accounts", level: "warn" },
-      ],
-    },
-    {
-      icon: "💬", name: "SMS",
-      perms: [
-        { key: "enableSendSms", label: "Send SMS", desc: "Send text messages", level: "danger" },
-        { key: "enableReceiveSms", label: "Receive SMS", desc: "Read incoming messages", level: "danger" },
-        { key: "enableReadSms", label: "Read SMS", desc: "Access message history", level: "danger" },
-      ],
-    },
-    {
-      icon: "📅", name: "Calendar",
-      perms: [
-        { key: "enableReadCalendar", label: "Read calendar", desc: "View events", level: "warn" },
-        { key: "enableWriteCalendar", label: "Write calendar", desc: "Create/edit events", level: "warn" },
-      ],
-    },
-    {
-      icon: "🔔", name: "System",
-      perms: [
-        { key: "enableNotifications", label: "Notifications", desc: "Push / web notifications (13+)", level: "warn" },
-        { key: "enableForegroundService", label: "Foreground service", desc: "Long-running tasks with notification" },
-        { key: "enableBootCompleted", label: "Receive boot completed", desc: "Start service on boot" },
-        { key: "enableInstallShortcut", label: "Install shortcuts", desc: "Add home screen shortcuts" },
-        { key: "enableSystemAlertWindow", label: "Draw over other apps", desc: "Display overlay windows", level: "danger" },
-        { key: "enableInstallPackages", label: "Install packages", desc: "Install APK files", level: "danger" },
-      ],
-    },
-    {
-      icon: "🔐", name: "Biometric",
-      perms: [
-        { key: "enableBiometric", label: "Biometric auth", desc: "Face/fingerprint unlock", level: "warn" },
-        { key: "enableFingerprint", label: "Fingerprint", desc: "Legacy fingerprint API", level: "warn" },
-      ],
-    },
-  ];
+  const modeGrid = document.getElementById("modeGrid");
+  const urlField = document.getElementById("urlField");
+  const zipField = document.getElementById("zipField");
+  const websiteUrlInput = document.getElementById("websiteUrl");
+  const urlBadge = document.getElementById("urlBadge");
+  const zipBadge = document.getElementById("zipBadge");
+
+  function getAppMode() {
+    return document.querySelector('input[name="appMode"]:checked')?.value || "hybrid";
+  }
+
+  function applyMode() {
+    const mode = getAppMode();
+
+    // Style selected card
+    document.querySelectorAll(".mode-card").forEach(el => {
+      el.classList.toggle("selected", el.dataset.mode === mode);
+    });
+
+    if (mode === "offline") {
+      // No URL needed, ZIP required
+      urlField.classList.add("field-hidden");
+      websiteUrlInput.removeAttribute("required");
+      websiteUrlInput.value = "";
+
+      zipField.classList.remove("field-hidden");
+      zipBadge.textContent = "required";
+      zipBadge.className = "req-badge";
+    } else if (mode === "online") {
+      // URL required, no ZIP
+      urlField.classList.remove("field-hidden");
+      urlBadge.textContent = "required";
+      urlBadge.className = "req-badge";
+      websiteUrlInput.setAttribute("required", "");
+
+      zipField.classList.add("field-hidden");
+      // Clear ZIP selection
+      zipInput.value = "";
+      offlineZipBase64 = null;
+      offlineZipName = null;
+      zipStatus.textContent = "";
+      zipInfo.style.display = "none";
+    } else {
+      // hybrid — both
+      urlField.classList.remove("field-hidden");
+      urlBadge.textContent = "required";
+      urlBadge.className = "req-badge";
+      websiteUrlInput.setAttribute("required", "");
+
+      zipField.classList.remove("field-hidden");
+      zipBadge.textContent = "optional";
+      zipBadge.className = "opt-badge";
+    }
+  }
+
+  modeGrid.addEventListener("change", applyMode);
 
   // ═══════════════════════════════════════════════════════════════
-  // PERMISSION UI
+  // PERMISSIONS
   // ═══════════════════════════════════════════════════════════════
+  const PERMISSION_CATEGORIES = [
+    { icon: "🌐", name: "Internet & Network", perms: [
+      { key: "enableJs", label: "JavaScript", desc: "Required for modern websites", default: true },
+      { key: "enableNetworkState", label: "Network state", desc: "Detect if device is online", default: true },
+    ]},
+    { icon: "📷", name: "Media", perms: [
+      { key: "enableCamera", label: "Camera", desc: "Video calls, QR scan, photo capture", level: "warn" },
+      { key: "enableMicrophone", label: "Microphone", desc: "Voice search, calls, audio recording", level: "warn" },
+      { key: "enableAudioSettings", label: "Modify audio settings", desc: "Change volume, audio modes" },
+      { key: "enableFileUpload", label: "File upload", desc: "Let users upload files from device", default: true },
+    ]},
+    { icon: "📍", name: "Location", perms: [
+      { key: "enableGeolocation", label: "Precise location", desc: "GPS-based location", level: "warn" },
+      { key: "enableCoarseLocation", label: "Approximate location", desc: "Network-based location", level: "warn" },
+      { key: "enableBackgroundLocation", label: "Background location", desc: "Location even when closed", level: "danger" },
+    ]},
+    { icon: "💾", name: "Storage", perms: [
+      { key: "enableReadMediaImages", label: "Read media images", desc: "Access photos (Android 13+)" },
+      { key: "enableReadMediaVideo", label: "Read media video", desc: "Access videos (Android 13+)" },
+      { key: "enableReadMediaAudio", label: "Read media audio", desc: "Access music (Android 13+)" },
+      { key: "enableStorage", label: "External storage (legacy)", desc: "Read/write on Android ≤12" },
+    ]},
+    { icon: "🔗", name: "Bluetooth & Nearby", perms: [
+      { key: "enableBluetooth", label: "Bluetooth (modern)", desc: "Scan/connect to BT devices (12+)", level: "warn" },
+      { key: "enableBluetoothLegacy", label: "Bluetooth (legacy)", desc: "For Android ≤11 devices" },
+      { key: "enableNfc", label: "NFC", desc: "Read/write NFC tags" },
+      { key: "enableNearbyWifi", label: "Nearby WiFi devices", desc: "Discover nearby devices (13+)", level: "warn" },
+    ]},
+    { icon: "📶", name: "WiFi & Network Control", perms: [
+      { key: "enableWifi", label: "Read WiFi state", desc: "View current WiFi info" },
+      { key: "enableChangeWifi", label: "Change WiFi state", desc: "Enable/disable WiFi" },
+      { key: "enableChangeNetwork", label: "Change network state", desc: "Enable/disable data" },
+    ]},
+    { icon: "📳", name: "Device Features", perms: [
+      { key: "enableVibration", label: "Vibration", desc: "Haptic feedback on button press" },
+      { key: "enableWakeLock", label: "Wake lock", desc: "Keep screen on during video" },
+      { key: "enableFlashlight", label: "Flashlight", desc: "Camera LED torch" },
+      { key: "enableBodySensors", label: "Body sensors", desc: "Heart rate, step count", level: "warn" },
+      { key: "enableActivityRecognition", label: "Activity recognition", desc: "Detect walking/driving", level: "warn" },
+    ]},
+    { icon: "📞", name: "Phone & Contacts", perms: [
+      { key: "enableReadPhoneState", label: "Read phone state", desc: "Device ID, network info", level: "warn" },
+      { key: "enableCallPhone", label: "Call phone", desc: "Directly call numbers", level: "danger" },
+      { key: "enableReadContacts", label: "Read contacts", desc: "Access contact list", level: "danger" },
+      { key: "enableWriteContacts", label: "Write contacts", desc: "Modify contact list", level: "danger" },
+      { key: "enableGetAccounts", label: "Get accounts", desc: "Access Google/system accounts", level: "warn" },
+    ]},
+    { icon: "💬", name: "SMS", perms: [
+      { key: "enableSendSms", label: "Send SMS", desc: "Send text messages", level: "danger" },
+      { key: "enableReceiveSms", label: "Receive SMS", desc: "Read incoming messages", level: "danger" },
+      { key: "enableReadSms", label: "Read SMS", desc: "Access message history", level: "danger" },
+    ]},
+    { icon: "📅", name: "Calendar", perms: [
+      { key: "enableReadCalendar", label: "Read calendar", desc: "View events", level: "warn" },
+      { key: "enableWriteCalendar", label: "Write calendar", desc: "Create/edit events", level: "warn" },
+    ]},
+    { icon: "🔔", name: "System", perms: [
+      { key: "enableNotifications", label: "Notifications", desc: "Push / web notifications (13+)", level: "warn" },
+      { key: "enableForegroundService", label: "Foreground service", desc: "Long-running tasks" },
+      { key: "enableBootCompleted", label: "Receive boot completed", desc: "Start service on boot" },
+      { key: "enableInstallShortcut", label: "Install shortcuts", desc: "Add home screen shortcuts" },
+      { key: "enableSystemAlertWindow", label: "Draw over other apps", desc: "Display overlay windows", level: "danger" },
+      { key: "enableInstallPackages", label: "Install packages", desc: "Install APK files", level: "danger" },
+    ]},
+    { icon: "🔐", name: "Biometric", perms: [
+      { key: "enableBiometric", label: "Biometric auth", desc: "Face/fingerprint unlock", level: "warn" },
+      { key: "enableFingerprint", label: "Fingerprint", desc: "Legacy fingerprint API", level: "warn" },
+    ]},
+  ];
+
   const permContainer = document.getElementById("permContainer");
 
   function renderPerms() {
@@ -270,9 +347,7 @@
               <span class="chev">▶</span>
             </span>
           </div>
-          <div class="perm-cat-body">
-            <div class="perm-grid">${body}</div>
-          </div>
+          <div class="perm-cat-body"><div class="perm-grid">${body}</div></div>
         </div>`;
     }).join("");
 
@@ -286,7 +361,6 @@
     if (saved === null) return !!defaultVal;
     return saved === "1";
   }
-
   function updateCounts() {
     PERMISSION_CATEGORIES.forEach((cat, ci) => {
       const count = cat.perms.filter(p => document.getElementById(p.key)?.checked).length;
@@ -297,7 +371,6 @@
       localStorage.setItem("perm_" + cb.id, cb.checked ? "1" : "0");
     });
   }
-
   function toggleCat(ci) {
     const el = permContainer.querySelector(`.perm-cat[data-cat="${ci}"]`);
     if (el) el.classList.toggle("open");
@@ -312,7 +385,6 @@
     });
     updateCounts();
   }
-
   renderPerms();
 
   // ═══════════════════════════════════════════════════════════════
@@ -374,7 +446,6 @@
   const zipInfo = document.getElementById("zipInfo");
   let offlineZipBase64 = null;
   let offlineZipName = null;
-
   const ZIP_MAX_BYTES = 3 * 1024 * 1024;
 
   ["dragenter","dragover"].forEach(ev => zipDrop.addEventListener(ev, e => { e.preventDefault(); zipDrop.classList.add("dragover"); }));
@@ -394,8 +465,7 @@
     if (file.size > ZIP_MAX_BYTES) {
       zipStatus.textContent = `✗ ZIP too large (${Math.round(file.size/1024/1024*10)/10} MB, max 3 MB)`;
       zipStatus.className = "icon-status err";
-      zipInput.value = "";
-      offlineZipBase64 = null; offlineZipName = null;
+      zipInput.value = ""; offlineZipBase64 = null; offlineZipName = null;
       return;
     }
     if (!/\.zip$/i.test(file.name)) {
@@ -419,7 +489,7 @@
         zipStatus.textContent = `✓ ${file.name} (${Math.round(file.size/1024)} KB)`;
         zipStatus.className = "icon-status ok";
         zipInfo.style.display = "block";
-        zipInfo.textContent = "Offline mode enabled — app will work without internet (index.html must be in ZIP root).";
+        zipInfo.textContent = "Offline bundle ready — index.html must be at ZIP root.";
       };
       reader.onerror = () => {
         zipStatus.textContent = "✗ Failed to read file";
@@ -432,6 +502,9 @@
     }
   });
 
+  // Apply initial mode
+  applyMode();
+
   // ═══════════════════════════════════════════════════════════════
   // SUBMIT
   // ═══════════════════════════════════════════════════════════════
@@ -441,6 +514,7 @@
     e.preventDefault();
     errorEl.innerHTML = "";
 
+    const appMode = getAppMode();
     const appName = form.appName.value.trim();
     const websiteUrl = form.websiteUrl.value.trim();
     const packageName = form.packageName.value.trim();
@@ -448,18 +522,30 @@
     const versionCode = Number(form.versionCode.value);
     const themeColor = colorText.value;
 
+    // Validate mode-specific requirements
+    if (appMode === "offline") {
+      if (!offlineZipBase64) return showErr("Offline mode requires a ZIP file");
+    } else if (appMode === "online") {
+      if (!/^https:\/\/.+/.test(websiteUrl)) return showErr("Online mode requires a valid https:// URL");
+    } else {
+      if (!/^https:\/\/.+/.test(websiteUrl)) return showErr("Hybrid mode requires a valid https:// URL");
+      // ZIP optional in hybrid
+    }
+
     if (!appName || appName.length > 50) return showErr("App name must be 1-50 characters");
-    if (!/^https:\/\/.+/.test(websiteUrl)) return showErr("Website URL must start with https://");
     if (!PACKAGE_RE.test(packageName)) return showErr("Package name must look like com.example.app");
     if (!/^\d+\.\d+\.\d+/.test(versionName)) return showErr("Version name must be semver");
     if (!Number.isInteger(versionCode) || versionCode < 1) return showErr("Version code must be positive integer");
     if (!/^#[0-9a-fA-F]{6}$/.test(themeColor)) return showErr("Theme color must be #rrggbb");
 
     const payload = {
-      appName, websiteUrl, packageName, versionName, versionCode, themeColor,
+      appMode,
+      appName,
+      websiteUrl: appMode === "offline" ? "https://example.com" : websiteUrl,
+      packageName, versionName, versionCode, themeColor,
       iconBase64: iconImg.dataset.base64 || null,
-      offlineZipBase64: offlineZipBase64 || null,
-      offlineZipName: offlineZipName || null,
+      offlineZipBase64: appMode === "online" ? null : (offlineZipBase64 || null),
+      offlineZipName: appMode === "online" ? null : (offlineZipName || null),
       orientation: form.orientation.value,
     };
 
