@@ -5,6 +5,47 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Build status — Let-S APK Builder</title>
 <link rel="stylesheet" href="assets/style.css" />
+<style>
+  .step-list { list-style: none; padding: 0; margin: 16px 0; }
+  .step {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .step:last-child { border-bottom: none; }
+  .step-icon {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: bold; flex-shrink: 0;
+    background: var(--glass-strong); color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .step.done .step-icon {
+    background: rgba(62, 207, 142, 0.15);
+    color: var(--success);
+    border-color: rgba(62, 207, 142, 0.4);
+  }
+  .step.active .step-icon {
+    background: rgba(245, 165, 36, 0.15);
+    color: var(--warning);
+    border-color: rgba(245, 165, 36, 0.4);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  .step.failed .step-icon {
+    background: rgba(255, 92, 122, 0.15);
+    color: var(--danger);
+    border-color: rgba(255, 92, 122, 0.4);
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+  }
+  .step-name { flex: 1; }
+  .step.done .step-name { color: var(--text); }
+  .step.active .step-name { color: var(--warning); font-weight: 600; }
+  .step.pending .step-name { color: var(--muted); }
+  .step.failed .step-name { color: var(--danger); font-weight: 600; }
+</style>
 </head>
 <body>
 <header class="nav">
@@ -18,7 +59,7 @@
 
 <main class="container">
   <h1 style="margin-bottom:6px;">Build status</h1>
-  <p style="color:var(--muted);margin-top:0;" id="buildIdLabel">—</p>
+  <p style="color:var(--muted);margin-top:0;font-size:12px;" id="buildIdLabel">—</p>
 
   <div class="card">
     <div class="status-bar">
@@ -27,6 +68,12 @@
     </div>
 
     <div class="progress"><div id="progressBar"></div></div>
+
+    <p id="currentStep" style="color:var(--warning);font-size:13px;margin:8px 0;font-weight:600;display:none;">
+      ⏳ <span id="currentStepName"></span>
+    </p>
+
+    <ul class="step-list" id="stepList"></ul>
 
     <div id="msg"></div>
 
@@ -56,16 +103,34 @@
   const downloadWrap = document.getElementById("downloadWrap");
   const downloadBtn = document.getElementById("downloadBtn");
   const buildIdLabel = document.getElementById("buildIdLabel");
+  const stepList = document.getElementById("stepList");
+  const currentStep = document.getElementById("currentStep");
+  const currentStepName = document.getElementById("currentStepName");
+
+  // Define all steps in order
+  const STEPS = [
+    { index: 1,  name: "Received job" },
+    { index: 2,  name: "Checked out repository" },
+    { index: 3,  name: "Node.js ready" },
+    { index: 4,  name: "Java 17 ready" },
+    { index: 5,  name: "Android SDK ready" },
+    { index: 6,  name: "Android build tools installed" },
+    { index: 7,  name: "Configuration loaded" },
+    { index: 8,  name: "Android project generated" },
+    { index: 9,  name: "APK compiled with Gradle" },
+    { index: 10, name: "APK signed with keystore" },
+    { index: 11, name: "Uploaded to GitHub Releases" },
+  ];
+
+  const PCT = { queued: 5, building: 50, signing: 75, uploading: 90, completed: 100, failed: 100 };
 
   if (!id) {
     msg.innerHTML = `<div class="error-box">Missing buildId in URL.</div>`;
   } else {
     buildIdLabel.textContent = `ID: ${id}`;
+    renderSteps(-1, "pending");  // initial render
     poll();
   }
-
-  const STEPS = ["queued","building","signing","uploading","completed"];
-  const PCT = { queued: 10, building: 45, signing: 70, uploading: 88, completed: 100, failed: 100 };
 
   let stopped = false;
 
@@ -81,10 +146,41 @@
     setTimeout(poll, 3000);
   }
 
+  function renderSteps(activeIndex, status) {
+    stepList.innerHTML = STEPS.map(s => {
+      let cls = "pending";
+      if (status === "failed" && s.index === activeIndex + 1) cls = "failed";
+      else if (s.index <= activeIndex) cls = "done";
+      else if (s.index === activeIndex + 1) cls = "active";
+
+      const icon = cls === "done" ? "✓" : cls === "active" ? "●" : cls === "failed" ? "✕" : s.index;
+      return `<li class="step ${cls}">
+        <span class="step-icon">${icon}</span>
+        <span class="step-name">${s.name}</span>
+      </li>`;
+    }).join("");
+  }
+
   function render(b) {
     statusPill.className = `pill ${b.status}`;
     statusPill.textContent = b.status;
-    progressBar.style.width = (PCT[b.status] || 10) + "%";
+    progressBar.style.width = (PCT[b.status] || 5) + "%";
+
+    // Steps rendering
+    const stepIndex = b.stepIndex || 0;
+    if (b.status === "completed") {
+      renderSteps(11, "completed");
+      currentStep.style.display = "none";
+    } else if (b.status === "failed") {
+      renderSteps(stepIndex, "failed");
+      currentStep.style.display = "none";
+    } else if (stepIndex > 0) {
+      renderSteps(stepIndex, "building");
+      currentStep.style.display = "block";
+      currentStepName.textContent = b.currentStep || "Working...";
+    } else {
+      renderSteps(0, "queued");
+    }
 
     if (b.logs?.length) logBox.textContent = b.logs.join("\n");
 
@@ -93,12 +189,12 @@
       downloadWrap.style.display = "block";
       downloadBtn.href = api.downloadUrl(b.id);
       downloadBtn.setAttribute("download", `${b.config?.appName || "app"}.apk`);
-      msg.innerHTML = `<div class="success-box">Build completed. Your APK is ready.</div>`;
+      msg.innerHTML = `<div class="success-box">✅ Build completed. Your APK is ready.</div>`;
     } else if (b.status === "failed") {
       spinner.style.display = "none";
-      msg.innerHTML = `<div class="error-box">Build failed: ${b.error || "unknown error"}</div>`;
+      msg.innerHTML = `<div class="error-box">❌ Build failed: ${b.error || "unknown error"}</div>`;
     } else {
-      msg.innerHTML = `<div style="color:var(--muted);font-size:13px;">Working… this page refreshes automatically.</div>`;
+      msg.innerHTML = `<div style="color:var(--muted);font-size:12px;">Auto-refreshing every 3 seconds…</div>`;
     }
   }
 </script>
