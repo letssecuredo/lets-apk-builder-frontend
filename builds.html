@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>My Builds — Let-S APK Builder</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="nav">
+  <div class="brand">Let-S <span>APK Builder</span></div>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="build.html">Build</a>
+    <a href="builds.html" class="active">My Builds</a>
+  </nav>
+</header>
+
+<main class="container">
+  <h1>Recent builds</h1>
+  <p style="color:var(--muted);margin-top:0;">Last 20 builds on this backend.</p>
+
+  <div class="card" id="listCard">
+    <div id="listError"></div>
+    <div id="listBody">
+      <div style="color:var(--muted);font-size:13px;padding:10px;">Loading…</div>
+    </div>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+  (async () => {
+    const body = document.getElementById("listBody");
+    const err = document.getElementById("listError");
+    try {
+      const builds = await api.listBuilds(20);
+      if (!builds.length) {
+        body.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:10px;">No builds yet. <a href="build.html">Create one →</a></div>`;
+        return;
+      }
+      body.innerHTML = builds.map((b) => `
+        <div class="build-item">
+          <div class="meta">
+            <span class="name">${escapeHtml(b.config?.appName || "(untitled)")}</span>
+            <span class="sub">${escapeHtml(b.id)} · ${new Date(b.createdAt).toLocaleString()}</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <span class="pill ${b.status}">${b.status}</span>
+            ${b.status === "completed" ? `<a class="btn ghost" href="status.html?buildId=${b.id}">View</a>` : `<a class="btn ghost" href="status.html?buildId=${b.id}">Track</a>`}
+          </div>
+        </div>
+      `).join("");
+    } catch (e) {
+      err.innerHTML = `<div class="error-box">${e.message}</div>`;
+    }
+  })();
+
+  function escapeHtml(s) {
+    return String(s).replace(/[<>&"']/g, (c) => ({
+      "<":"&lt;","<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"
+    }[c] || c));
+  }
+</script>
+</body>
+</html>
