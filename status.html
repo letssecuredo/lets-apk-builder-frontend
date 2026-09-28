@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Build status — Let-S APK Builder</title>
+<link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+<header class="nav">
+  <div class="brand">Let-S <span>APK Builder</span></div>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="build.html">Build</a>
+    <a href="builds.html">My Builds</a>
+  </nav>
+</header>
+
+<main class="container">
+  <h1 style="margin-bottom:6px;">Build status</h1>
+  <p style="color:var(--muted);margin-top:0;" id="buildIdLabel">—</p>
+
+  <div class="card">
+    <div class="status-bar">
+      <span id="statusPill" class="pill queued">queued</span>
+      <span class="spinner" id="spinner"></span>
+    </div>
+
+    <div class="progress"><div id="progressBar"></div></div>
+
+    <div id="msg"></div>
+
+    <div id="downloadWrap" style="display:none;margin-top:16px;">
+      <a id="downloadBtn" class="btn btn-block" download>⬇ Download APK</a>
+    </div>
+
+    <details style="margin-top:16px;">
+      <summary style="cursor:pointer;color:var(--muted);font-size:13px;">Build logs</summary>
+      <div class="log-box" id="logBox" style="margin-top:10px;"></div>
+    </details>
+  </div>
+
+  <div style="margin-top:18px;">
+    <a href="build.html" class="btn secondary">Build another</a>
+  </div>
+</main>
+
+<script src="assets/app.js"></script>
+<script>
+  const id = qs("buildId");
+  const statusPill = document.getElementById("statusPill");
+  const progressBar = document.getElementById("progressBar");
+  const logBox = document.getElementById("logBox");
+  const msg = document.getElementById("msg");
+  const spinner = document.getElementById("spinner");
+  const downloadWrap = document.getElementById("downloadWrap");
+  const downloadBtn = document.getElementById("downloadBtn");
+  const buildIdLabel = document.getElementById("buildIdLabel");
+
+  if (!id) {
+    msg.innerHTML = `<div class="error-box">Missing buildId in URL.</div>`;
+  } else {
+    buildIdLabel.textContent = `ID: ${id}`;
+    poll();
+  }
+
+  const STEPS = ["queued","building","signing","uploading","completed"];
+  const PCT = { queued: 10, building: 45, signing: 70, uploading: 88, completed: 100, failed: 100 };
+
+  let stopped = false;
+
+  async function poll() {
+    if (stopped) return;
+    try {
+      const b = await api.getBuild(id);
+      render(b);
+      if (b.status === "completed" || b.status === "failed") { stopped = true; return; }
+    } catch (err) {
+      msg.innerHTML = `<div class="error-box">${err.message}</div>`;
+    }
+    setTimeout(poll, 3000);
+  }
+
+  function render(b) {
+    statusPill.className = `pill ${b.status}`;
+    statusPill.textContent = b.status;
+    progressBar.style.width = (PCT[b.status] || 10) + "%";
+
+    if (b.logs?.length) logBox.textContent = b.logs.join("\n");
+
+    if (b.status === "completed" && b.apkUrl) {
+      spinner.style.display = "none";
+      downloadWrap.style.display = "block";
+      downloadBtn.href = api.downloadUrl(b.id);
+      downloadBtn.setAttribute("download", `${b.config?.appName || "app"}.apk`);
+      msg.innerHTML = `<div class="success-box">Build completed. Your APK is ready.</div>`;
+    } else if (b.status === "failed") {
+      spinner.style.display = "none";
+      msg.innerHTML = `<div class="error-box">Build failed: ${b.error || "unknown error"}</div>`;
+    } else {
+      msg.innerHTML = `<div style="color:var(--muted);font-size:13px;">Working… this page refreshes automatically.</div>`;
+    }
+  }
+</script>
+</body>
+</html>
