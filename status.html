@@ -3,38 +3,69 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <title>Build status — Let-S APK Builder</title>
-<link rel="stylesheet" href="assets/style.css" />
+<link rel="stylesheet" href="assets/style.css?v=4" />
 <style>
-  .step-list { list-style: none; padding: 0; margin: 16px 0; }
+  /* ---- Live timer ---- */
+  .timer-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin: 8px 0 14px; flex-wrap: wrap;
+  }
+  .timer {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 15px; font-weight: 700;
+    color: var(--warning);
+    background: rgba(245, 165, 36, 0.08);
+    border: 1px solid rgba(245, 165, 36, 0.3);
+    padding: 6px 12px; border-radius: 10px;
+  }
+  .timer.done {
+    color: var(--success);
+    background: rgba(62, 207, 142, 0.08);
+    border-color: rgba(62, 207, 142, 0.3);
+  }
+  .timer.failed {
+    color: var(--danger);
+    background: rgba(255, 92, 122, 0.08);
+    border-color: rgba(255, 92, 122, 0.3);
+  }
+
+  /* ---- Step list ---- */
+  .step-list { list-style: none; padding: 0; margin: 16px 0 0; }
   .step {
     display: flex; align-items: center; gap: 12px;
-    padding: 10px 12px; border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
     font-size: 14px;
   }
   .step:last-child { border-bottom: none; }
   .step-icon {
-    width: 24px; height: 24px; border-radius: 50%;
+    width: 26px; height: 26px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
     font-size: 12px; font-weight: bold; flex-shrink: 0;
     background: var(--glass-strong); color: var(--muted);
     border: 1px solid var(--border);
+    transition: all .3s;
   }
   .step.done .step-icon {
     background: rgba(62, 207, 142, 0.15);
     color: var(--success);
-    border-color: rgba(62, 207, 142, 0.4);
+    border-color: rgba(62, 207, 142, 0.5);
   }
   .step.active .step-icon {
     background: rgba(245, 165, 36, 0.15);
     color: var(--warning);
-    border-color: rgba(245, 165, 36, 0.4);
+    border-color: rgba(245, 165, 36, 0.5);
     animation: pulse 1.2s ease-in-out infinite;
   }
   .step.failed .step-icon {
     background: rgba(255, 92, 122, 0.15);
     color: var(--danger);
-    border-color: rgba(255, 92, 122, 0.4);
+    border-color: rgba(255, 92, 122, 0.5);
   }
   @keyframes pulse {
     0%, 100% { transform: scale(1); }
@@ -42,9 +73,99 @@
   }
   .step-name { flex: 1; }
   .step.done .step-name { color: var(--text); }
-  .step.active .step-name { color: var(--warning); font-weight: 600; }
+  .step.active .step-name { color: var(--warning); font-weight: 700; }
   .step.pending .step-name { color: var(--muted); }
-  .step.failed .step-name { color: var(--danger); font-weight: 600; }
+  .step.failed .step-name { color: var(--danger); font-weight: 700; }
+  .step-time {
+    font-family: ui-monospace, monospace;
+    font-size: 11px; color: var(--muted);
+  }
+
+  /* ---- Current step banner ---- */
+  .current-banner {
+    background: rgba(245, 165, 36, 0.06);
+    border: 1px solid rgba(245, 165, 36, 0.25);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin: 12px 0;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px;
+    color: var(--warning);
+    font-weight: 600;
+  }
+  .current-banner .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--warning);
+    animation: blink 1s ease-in-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ---- Download button ---- */
+  .download-hero {
+    display: none;
+    margin-top: 18px;
+    padding: 22px;
+    background: linear-gradient(135deg, rgba(62,207,142,0.12), rgba(31,111,235,0.12));
+    border: 2px solid rgba(62, 207, 142, 0.5);
+    border-radius: 14px;
+    text-align: center;
+    animation: fadeUp .5s ease;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .download-hero h3 {
+    margin: 0 0 6px;
+    font-size: 17px;
+    color: var(--success);
+  }
+  .download-hero p {
+    margin: 0 0 16px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .dl-big-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 10px;
+    padding: 16px 28px;
+    background: var(--success);
+    color: #fff;
+    font-weight: 800;
+    font-size: 17px;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    box-shadow: 0 6px 20px rgba(62, 207, 142, 0.35);
+    transition: transform .15s, box-shadow .15s;
+  }
+  .dl-big-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 26px rgba(62, 207, 142, 0.5);
+  }
+  .dl-big-btn:active { transform: translateY(0); }
+
+  .dl-meta {
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .dl-meta a {
+    color: var(--muted);
+    text-decoration: underline;
+  }
+
+  /* ---- Log box ---- */
+  .log-box {
+    background: #05080f; border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; font-family: ui-monospace, Menlo, monospace; font-size: 12px;
+    max-height: 240px; overflow-y: auto; white-space: pre-wrap; color: #a9b7cc;
+  }
 </style>
 </head>
 <body>
@@ -60,26 +181,39 @@
 
 <main class="container">
   <h1 style="margin-bottom:6px;">Build status</h1>
-  <p style="color:var(--muted);margin-top:0;font-size:12px;" id="buildIdLabel">—</p>
+  <p style="color:var(--muted);margin-top:0;font-size:12px;word-break:break-all;" id="buildIdLabel">—</p>
 
   <div class="card">
-    <div class="status-bar">
+    <!-- Status pill + timer -->
+    <div class="timer-bar">
       <span id="statusPill" class="pill queued">queued</span>
-      <span class="spinner" id="spinner"></span>
+      <span id="timer" class="timer">⏱ 0s</span>
     </div>
 
-    <div class="progress"><div id="progressBar"></div></div>
+    <!-- Progress bar -->
+    <div class="progress"><div id="progressBar" style="width:0%"></div></div>
 
-    <p id="currentStep" style="color:var(--warning);font-size:13px;margin:8px 0;font-weight:600;display:none;">
-      ⏳ <span id="currentStepName"></span>
-    </p>
+    <!-- Current step banner -->
+    <div id="currentBanner" class="current-banner" style="display:none;">
+      <span class="dot"></span>
+      <span id="currentBannerText">Working…</span>
+    </div>
 
+    <!-- Step list -->
     <ul class="step-list" id="stepList"></ul>
 
+    <!-- Message -->
     <div id="msg"></div>
 
-    <div id="downloadWrap" style="display:none;margin-top:16px;">
-      <a id="downloadBtn" class="btn btn-block" download>⬇ Download APK</a>
+    <!-- Download hero (shown on completed) -->
+    <div id="downloadHero" class="download-hero">
+      <h3>✅ APK Ready!</h3>
+      <p id="downloadMeta">Build completed in …</p>
+      <a id="downloadBtn" class="dl-big-btn" href="#" download>⬇ Download APK</a>
+      <div class="dl-meta">
+        Or copy direct link:
+        <a href="#" id="directLink" target="_blank" rel="noopener">GitHub Releases URL</a>
+      </div>
     </div>
 
     <details style="margin-top:16px;">
@@ -90,25 +224,16 @@
 
   <div style="margin-top:18px;">
     <a href="build.html" class="btn secondary">Build another</a>
+    <a href="downloads.html" class="btn ghost">All downloads</a>
   </div>
 </main>
 
-<script src="assets/app.js"></script>
 <script>
-  const id = qs("buildId");
-  const statusPill = document.getElementById("statusPill");
-  const progressBar = document.getElementById("progressBar");
-  const logBox = document.getElementById("logBox");
-  const msg = document.getElementById("msg");
-  const spinner = document.getElementById("spinner");
-  const downloadWrap = document.getElementById("downloadWrap");
-  const downloadBtn = document.getElementById("downloadBtn");
-  const buildIdLabel = document.getElementById("buildIdLabel");
-  const stepList = document.getElementById("stepList");
-  const currentStep = document.getElementById("currentStep");
-  const currentStepName = document.getElementById("currentStepName");
+  // ============ Config ============
+  const API_BASE = "https://lets-apk-builder.onrender.com";
+  const POLL_MS = 3000;
 
-  // ⚠️ MUST MATCH workflow build-apk.yml STEP_INDEX values
+  // ============ Steps (must match workflow STEP_INDEX) ============
   const STEPS = [
     { index: 1, name: "Received job" },
     { index: 2, name: "Android SDK ready" },
@@ -119,37 +244,79 @@
     { index: 7, name: "Uploaded to GitHub Releases" },
   ];
 
-  const PCT = { queued: 5, building: 50, signing: 75, uploading: 90, completed: 100, failed: 100 };
+  const PCT = { queued: 3, building: 55, signing: 80, uploading: 95, completed: 100, failed: 100 };
 
-  if (!id) {
-    msg.innerHTML = `<div class="error-box">Missing buildId in URL.</div>`;
-  } else {
-    buildIdLabel.textContent = `ID: ${id}`;
-    renderSteps(0, "queued");
-    poll();
+  // ============ Elements ============
+  const id = new URLSearchParams(location.search).get("buildId");
+  const statusPill = document.getElementById("statusPill");
+  const progressBar = document.getElementById("progressBar");
+  const timerEl = document.getElementById("timer");
+  const logBox = document.getElementById("logBox");
+  const msg = document.getElementById("msg");
+  const stepList = document.getElementById("stepList");
+  const currentBanner = document.getElementById("currentBanner");
+  const currentBannerText = document.getElementById("currentBannerText");
+  const downloadHero = document.getElementById("downloadHero");
+  const downloadBtn = document.getElementById("downloadBtn");
+  const downloadMeta = document.getElementById("downloadMeta");
+  const directLink = document.getElementById("directLink");
+  const buildIdLabel = document.getElementById("buildIdLabel");
+
+  // ============ State ============
+  let startedAt = null;       // Date object
+  let completedAt = null;     // Date object
+  let finalStatus = null;
+  let currentStepIndex = 0;
+  let stepStartTimes = {};    // stepIndex -> Date
+  let lastStepIndexSeen = 0;
+  let pollTimer = null;
+  let tickTimer = null;
+
+  // ============ Helpers ============
+  function fmtDuration(ms) {
+    if (!ms || ms < 0) return "0s";
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    if (m > 0) return `${m}m ${sec}s`;
+    return `${sec}s`;
   }
 
-  let stopped = false;
-
-  async function poll() {
-    if (stopped) return;
-    try {
-      const b = await api.getBuild(id);
-      render(b);
-      if (b.status === "completed" || b.status === "failed") { stopped = true; return; }
-    } catch (err) {
-      msg.innerHTML = `<div class="error-box">${err.message}</div>`;
-    }
-    setTimeout(poll, 3000);
+  function fmtClock(ms) {
+    if (!ms || ms < 0) ms = 0;
+    const s = Math.floor(ms / 1000);
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   }
 
-  function renderSteps(activeIndex, status) {
-    stepList.innerHTML = STEPS.map(s => {
+  function updateTimer() {
+    if (!startedAt) return;
+    const endMs = completedAt ? completedAt.getTime() : Date.now();
+    const elapsed = endMs - startedAt.getTime();
+    timerEl.textContent = "⏱ " + fmtClock(elapsed);
+  }
+
+  function startTick() {
+    if (tickTimer) return;
+    tickTimer = setInterval(updateTimer, 1000);
+    updateTimer();
+  }
+
+  function stopAll() {
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+  }
+
+  // ============ Render ============
+  function renderSteps(activeIndex, mode) {
+    stepList.innerHTML = STEPS.map((s) => {
       let cls = "pending";
+      let timeStr = "";
 
-      if (status === "completed") {
+      if (mode === "completed") {
         cls = "done";
-      } else if (status === "failed") {
+      } else if (mode === "failed") {
         if (s.index < activeIndex) cls = "done";
         else if (s.index === activeIndex) cls = "failed";
         else cls = "pending";
@@ -159,50 +326,150 @@
         else cls = "pending";
       }
 
+      // Compute per-step time
+      const start = stepStartTimes[s.index];
+      if (start && (cls === "done" || cls === "failed" || cls === "active")) {
+        const end = completedAt && cls !== "active" ? completedAt : new Date();
+        // Only compute for the actual previous step (rough estimate)
+        if (s.index < activeIndex || (mode === "completed")) {
+          // We don't know exact end of each step; estimate: next step start
+          const nextStart = stepStartTimes[s.index + 1];
+          const endEstimate = nextStart || completedAt || new Date();
+          timeStr = fmtDuration(endEstimate.getTime() - start.getTime());
+        }
+      }
+
       const icon = cls === "done" ? "✓" : cls === "active" ? "●" : cls === "failed" ? "✕" : s.index;
       return `<li class="step ${cls}">
         <span class="step-icon">${icon}</span>
         <span class="step-name">${s.name}</span>
+        ${timeStr ? `<span class="step-time">${timeStr}</span>` : ""}
       </li>`;
     }).join("");
   }
 
   function render(b) {
+    finalStatus = b.status;
+
+    // Started time
+    if (b.createdAt && !startedAt) {
+      startedAt = new Date(b.createdAt);
+      startTick();
+    }
+    if (b.completedAt) {
+      completedAt = new Date(b.completedAt);
+      updateTimer();
+    }
+
+    // Status pill
     statusPill.className = `pill ${b.status}`;
     statusPill.textContent = b.status;
-    progressBar.style.width = (PCT[b.status] || 5) + "%";
 
-    const stepIndex = b.stepIndex || 0;
+    // Progress
+    const pct = PCT[b.status] || (b.stepIndex ? Math.min(95, (b.stepIndex / STEPS.length) * 100) : 3);
+    progressBar.style.width = pct + "%";
 
+    // Step index tracking (for per-step timing)
+    const si = Number(b.stepIndex) || 0;
+    if (si > lastStepIndexSeen) {
+      stepStartTimes[si] = new Date();
+      lastStepIndexSeen = si;
+    }
+    currentStepIndex = si;
+
+    // Current banner
+    if (b.status === "completed" || b.status === "failed") {
+      currentBanner.style.display = "none";
+    } else if (b.currentStep) {
+      currentBanner.style.display = "flex";
+      currentBannerText.textContent = b.currentStep + "…";
+    } else {
+      currentBanner.style.display = "none";
+    }
+
+    // Steps list
     if (b.status === "completed") {
       renderSteps(STEPS.length, "completed");
-      currentStep.style.display = "none";
     } else if (b.status === "failed") {
-      renderSteps(stepIndex || 1, "failed");
-      currentStep.style.display = "none";
-    } else if (stepIndex > 0) {
-      renderSteps(stepIndex, "building");
-      currentStep.style.display = "block";
-      currentStepName.textContent = b.currentStep || "Working...";
+      renderSteps(si || 1, "failed");
+    } else if (si > 0) {
+      renderSteps(si, "building");
     } else {
       renderSteps(0, "queued");
     }
 
+    // Logs
     if (b.logs?.length) logBox.textContent = b.logs.join("\n");
 
+    // Status message / download hero
     if (b.status === "completed" && b.apkUrl) {
-      spinner.style.display = "none";
-      downloadWrap.style.display = "block";
-      downloadBtn.href = api.downloadUrl(b.id);
+      // Final timer
+      timerEl.classList.remove("failed");
+      timerEl.classList.add("done");
+
+      // Show download hero
+      downloadHero.style.display = "block";
+      const dur = completedAt && startedAt ? fmtDuration(completedAt.getTime() - startedAt.getTime()) : "—";
+      downloadMeta.textContent = `Build completed in ${dur}`;
+
+      const dlUrl = `${API_BASE}/api/download/${b.id}`;
+      downloadBtn.href = dlUrl;
       downloadBtn.setAttribute("download", `${b.config?.appName || "app"}.apk`);
-      msg.innerHTML = `<div class="success-box">✅ Build completed. Your APK is ready.</div>`;
+
+      directLink.href = b.apkUrl;
+      directLink.textContent = "GitHub Releases URL";
+
+      msg.innerHTML = "";
     } else if (b.status === "failed") {
-      spinner.style.display = "none";
-      msg.innerHTML = `<div class="error-box">❌ Build failed: ${b.error || "unknown error"}</div>`;
+      timerEl.classList.remove("done");
+      timerEl.classList.add("failed");
+      downloadHero.style.display = "none";
+      msg.innerHTML = `<div class="error-box">❌ Build failed: ${escapeHtml(b.error || "unknown error")}</div>`;
     } else {
-      msg.innerHTML = `<div style="color:var(--muted);font-size:12px;">Auto-refreshing every 3 seconds…</div>`;
+      downloadHero.style.display = "none";
+      msg.innerHTML = `<div style="color:var(--muted);font-size:12px;">
+        Auto-refreshing every 3 seconds…</div>`;
     }
   }
+
+  function escapeHtml(s) {
+    return String(s ?? "").replace(/[<>&"']/g, (c) => ({
+      "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;"
+    }[c] || c));
+  }
+
+  // ============ Polling ============
+  async function fetchBuild() {
+    const res = await fetch(`${API_BASE}/api/build/${id}?_=${Date.now()}`);
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    return res.json();
+  }
+
+  async function poll() {
+    try {
+      const b = await fetchBuild();
+      render(b);
+      if (b.status === "completed" || b.status === "failed") {
+        stopAll();
+        return;
+      }
+    } catch (err) {
+      msg.innerHTML = `<div class="error-box">⚠ ${escapeHtml(err.message)} — retrying…</div>`;
+    }
+    pollTimer = setTimeout(poll, POLL_MS);
+  }
+
+  // ============ Init ============
+  if (!id) {
+    msg.innerHTML = `<div class="error-box">Missing buildId in URL.</div>`;
+  } else {
+    buildIdLabel.textContent = `ID: ${id}`;
+    renderSteps(0, "queued");
+    poll();
+  }
+
+  // Cleanup on page hide
+  window.addEventListener("beforeunload", stopAll);
 </script>
 </body>
 </html>
