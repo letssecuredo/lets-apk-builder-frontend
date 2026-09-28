@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <title>Build an APK — Let-S APK Builder</title>
-<link rel="stylesheet" href="assets/style.css?v=7" />
+<link rel="stylesheet" href="assets/style.css?v=8" />
 <style>
   .icon-drop { position:relative; border:2px dashed var(--border); border-radius:12px; padding:20px; text-align:center; background:var(--bg-2); transition:.15s; cursor:pointer; }
   .icon-drop:hover,.icon-drop.dragover { border-color:var(--accent); background:rgba(31,111,235,.06); }
@@ -32,7 +32,7 @@
   .perm-cat.open .perm-cat-body { display:block; }
   .perm-grid { display:grid; grid-template-columns:1fr; gap:8px; }
   @media (min-width:640px) { .perm-grid { grid-template-columns:1fr 1fr; } }
-  .perm-item { display:flex; align-items:flex-start; gap:10px; padding:9px 11px; background:rgba(255,255,255,.02); border:1px solid var(--border); border-radius:9px; cursor:pointer; transition:border-color .15s,background .15s; user-select:none; }
+  .perm-item { display:flex; align-items:flex-start; gap:10px; padding:9px 11px; background:rgba(255,255,255,.02); border:1px solid var(--border); border-radius:9px; cursor:pointer; user-select:none; }
   .perm-item:hover { border-color:rgba(99,161,255,.4); background:rgba(31,111,235,.04); }
   .perm-item input[type="checkbox"] { margin-top:2px; width:16px; height:16px; flex-shrink:0; }
   .perm-item .perm-text { display:flex; flex-direction:column; gap:2px; min-width:0; }
@@ -58,7 +58,7 @@
 
 <main class="container">
   <h1 style="margin-bottom:6px;">New build</h1>
-  <p style="color:var(--muted);margin-top:0;">Pick exactly the permissions your app needs.</p>
+  <p style="color:var(--muted);margin-top:0;">Fill in the details below. Pick the permissions your app needs.</p>
 
   <form id="buildForm" class="card" novalidate>
     <div class="grid-2">
@@ -76,6 +76,7 @@
       </div>
     </div>
 
+    <!-- Icon -->
     <div style="margin-top:20px;">
       <label for="iconFile">App icon</label>
       <div class="icon-drop" id="iconDrop">
@@ -87,6 +88,20 @@
         <img id="iconPreview" class="icon-preview" alt="Icon preview" />
         <div class="icon-preview-meta" id="iconPreviewMeta"></div>
       </div>
+    </div>
+
+    <!-- Offline ZIP -->
+    <div style="margin-top:20px;">
+      <label>Offline mode (optional)</label>
+      <div class="icon-drop" id="zipDrop">
+        <input id="offlineZip" type="file" accept=".zip,application/zip" />
+        <p class="hint">
+          <strong>Tap to choose</strong> a ZIP of your website<br>
+          <span style="font-size:11px;">Bundle site files for offline use · max 3 MB · index.html required at root</span>
+        </p>
+      </div>
+      <p id="zipStatus" class="icon-status"></p>
+      <div id="zipInfo" style="display:none;margin-top:8px;font-size:12px;color:var(--success);text-align:center;"></div>
     </div>
 
     <div style="margin-top:16px;">
@@ -115,120 +130,120 @@
   </form>
 </main>
 
-<script src="assets/app.js?v=7"></script>
+<script src="assets/app.js?v=8"></script>
 <script>
-  // ────────────────────────────────────────────────────────────────
-  // PERMISSION DEFINITIONS (data-driven UI)
-  // ────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // PERMISSION DEFINITIONS
+  // ═══════════════════════════════════════════════════════════════
   const PERMISSION_CATEGORIES = [
     {
       icon: "🌐", name: "Internet & Network",
       perms: [
         { key: "enableJs", label: "JavaScript", desc: "Required for modern websites", default: true },
-        { key: "enableNetworkState", label: "Network state", desc: "Detect if device is online", default: true, manifest: "ACCESS_NETWORK_STATE" },
+        { key: "enableNetworkState", label: "Network state", desc: "Detect if device is online", default: true },
       ],
     },
     {
       icon: "📷", name: "Media",
       perms: [
-        { key: "enableCamera", label: "Camera", desc: "Video calls, QR scan, photo capture", level: "warn", manifest: "CAMERA", runtime: true },
-        { key: "enableMicrophone", label: "Microphone", desc: "Voice search, calls, audio recording", level: "warn", manifest: "RECORD_AUDIO", runtime: true },
-        { key: "enableAudioSettings", label: "Modify audio settings", desc: "Change volume, audio modes", manifest: "MODIFY_AUDIO_SETTINGS" },
+        { key: "enableCamera", label: "Camera", desc: "Video calls, QR scan, photo capture", level: "warn" },
+        { key: "enableMicrophone", label: "Microphone", desc: "Voice search, calls, audio recording", level: "warn" },
+        { key: "enableAudioSettings", label: "Modify audio settings", desc: "Change volume, audio modes" },
         { key: "enableFileUpload", label: "File upload", desc: "Let users upload files from device", default: true },
       ],
     },
     {
       icon: "📍", name: "Location",
       perms: [
-        { key: "enableGeolocation", label: "Precise location", desc: "GPS-based location", level: "warn", manifest: "ACCESS_FINE_LOCATION", runtime: true },
-        { key: "enableCoarseLocation", label: "Approximate location", desc: "Network-based location", level: "warn", manifest: "ACCESS_COARSE_LOCATION", runtime: true },
-        { key: "enableBackgroundLocation", label: "Background location", desc: "Location even when app is closed", level: "danger", manifest: "ACCESS_BACKGROUND_LOCATION", runtime: true },
+        { key: "enableGeolocation", label: "Precise location", desc: "GPS-based location", level: "warn" },
+        { key: "enableCoarseLocation", label: "Approximate location", desc: "Network-based location", level: "warn" },
+        { key: "enableBackgroundLocation", label: "Background location", desc: "Location even when app is closed", level: "danger" },
       ],
     },
     {
       icon: "💾", name: "Storage",
       perms: [
-        { key: "enableReadMediaImages", label: "Read media images", desc: "Access photos (Android 13+)", manifest: "READ_MEDIA_IMAGES", runtime: true },
-        { key: "enableReadMediaVideo", label: "Read media video", desc: "Access videos (Android 13+)", manifest: "READ_MEDIA_VIDEO", runtime: true },
-        { key: "enableReadMediaAudio", label: "Read media audio", desc: "Access music (Android 13+)", manifest: "READ_MEDIA_AUDIO", runtime: true },
-        { key: "enableStorage", label: "External storage (legacy)", desc: "Read/write on Android ≤12", manifest: "READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE", runtime: true },
+        { key: "enableReadMediaImages", label: "Read media images", desc: "Access photos (Android 13+)" },
+        { key: "enableReadMediaVideo", label: "Read media video", desc: "Access videos (Android 13+)" },
+        { key: "enableReadMediaAudio", label: "Read media audio", desc: "Access music (Android 13+)" },
+        { key: "enableStorage", label: "External storage (legacy)", desc: "Read/write on Android ≤12" },
       ],
     },
     {
       icon: "🔗", name: "Bluetooth & Nearby",
       perms: [
-        { key: "enableBluetooth", label: "Bluetooth (modern)", desc: "Scan/connect to BT devices (12+)", level: "warn", manifest: "BLUETOOTH_SCAN,BLUETOOTH_CONNECT,BLUETOOTH_ADVERTISE", runtime: true },
-        { key: "enableBluetoothLegacy", label: "Bluetooth (legacy)", desc: "For Android ≤11 devices", manifest: "BLUETOOTH,BLUETOOTH_ADMIN" },
-        { key: "enableNfc", label: "NFC", desc: "Read/write NFC tags", manifest: "NFC" },
-        { key: "enableNearbyWifi", label: "Nearby WiFi devices", desc: "Discover nearby devices (13+)", level: "warn", manifest: "NEARBY_WIFI_DEVICES", runtime: true },
+        { key: "enableBluetooth", label: "Bluetooth (modern)", desc: "Scan/connect to BT devices (12+)", level: "warn" },
+        { key: "enableBluetoothLegacy", label: "Bluetooth (legacy)", desc: "For Android ≤11 devices" },
+        { key: "enableNfc", label: "NFC", desc: "Read/write NFC tags" },
+        { key: "enableNearbyWifi", label: "Nearby WiFi devices", desc: "Discover nearby devices (13+)", level: "warn" },
       ],
     },
     {
       icon: "📶", name: "WiFi & Network Control",
       perms: [
-        { key: "enableWifi", label: "Read WiFi state", desc: "View current WiFi info", manifest: "ACCESS_WIFI_STATE" },
-        { key: "enableChangeWifi", label: "Change WiFi state", desc: "Enable/disable WiFi", manifest: "CHANGE_WIFI_STATE" },
-        { key: "enableChangeNetwork", label: "Change network state", desc: "Enable/disable data", manifest: "CHANGE_NETWORK_STATE" },
+        { key: "enableWifi", label: "Read WiFi state", desc: "View current WiFi info" },
+        { key: "enableChangeWifi", label: "Change WiFi state", desc: "Enable/disable WiFi" },
+        { key: "enableChangeNetwork", label: "Change network state", desc: "Enable/disable data" },
       ],
     },
     {
       icon: "📳", name: "Device Features",
       perms: [
-        { key: "enableVibration", label: "Vibration", desc: "Haptic feedback on button press", manifest: "VIBRATE" },
-        { key: "enableWakeLock", label: "Wake lock", desc: "Keep screen on during video/reading", manifest: "WAKE_LOCK" },
-        { key: "enableFlashlight", label: "Flashlight", desc: "Camera LED torch", manifest: "FLASHLIGHT" },
-        { key: "enableBodySensors", label: "Body sensors", desc: "Heart rate, step count", level: "warn", manifest: "BODY_SENSORS", runtime: true },
-        { key: "enableActivityRecognition", label: "Activity recognition", desc: "Detect walking/driving", level: "warn", manifest: "ACTIVITY_RECOGNITION", runtime: true },
+        { key: "enableVibration", label: "Vibration", desc: "Haptic feedback on button press" },
+        { key: "enableWakeLock", label: "Wake lock", desc: "Keep screen on during video/reading" },
+        { key: "enableFlashlight", label: "Flashlight", desc: "Camera LED torch" },
+        { key: "enableBodySensors", label: "Body sensors", desc: "Heart rate, step count", level: "warn" },
+        { key: "enableActivityRecognition", label: "Activity recognition", desc: "Detect walking/driving", level: "warn" },
       ],
     },
     {
       icon: "📞", name: "Phone & Contacts",
       perms: [
-        { key: "enableReadPhoneState", label: "Read phone state", desc: "Device ID, network info", level: "warn", manifest: "READ_PHONE_STATE", runtime: true },
-        { key: "enableCallPhone", label: "Call phone", desc: "Directly call numbers", level: "danger", manifest: "CALL_PHONE", runtime: true },
-        { key: "enableReadContacts", label: "Read contacts", desc: "Access contact list", level: "danger", manifest: "READ_CONTACTS", runtime: true },
-        { key: "enableWriteContacts", label: "Write contacts", desc: "Modify contact list", level: "danger", manifest: "WRITE_CONTACTS", runtime: true },
-        { key: "enableGetAccounts", label: "Get accounts", desc: "Access Google/system accounts", level: "warn", manifest: "GET_ACCOUNTS", runtime: true },
+        { key: "enableReadPhoneState", label: "Read phone state", desc: "Device ID, network info", level: "warn" },
+        { key: "enableCallPhone", label: "Call phone", desc: "Directly call numbers", level: "danger" },
+        { key: "enableReadContacts", label: "Read contacts", desc: "Access contact list", level: "danger" },
+        { key: "enableWriteContacts", label: "Write contacts", desc: "Modify contact list", level: "danger" },
+        { key: "enableGetAccounts", label: "Get accounts", desc: "Access Google/system accounts", level: "warn" },
       ],
     },
     {
       icon: "💬", name: "SMS",
       perms: [
-        { key: "enableSendSms", label: "Send SMS", desc: "Send text messages", level: "danger", manifest: "SEND_SMS", runtime: true },
-        { key: "enableReceiveSms", label: "Receive SMS", desc: "Read incoming messages", level: "danger", manifest: "RECEIVE_SMS", runtime: true },
-        { key: "enableReadSms", label: "Read SMS", desc: "Access message history", level: "danger", manifest: "READ_SMS", runtime: true },
+        { key: "enableSendSms", label: "Send SMS", desc: "Send text messages", level: "danger" },
+        { key: "enableReceiveSms", label: "Receive SMS", desc: "Read incoming messages", level: "danger" },
+        { key: "enableReadSms", label: "Read SMS", desc: "Access message history", level: "danger" },
       ],
     },
     {
       icon: "📅", name: "Calendar",
       perms: [
-        { key: "enableReadCalendar", label: "Read calendar", desc: "View events", level: "warn", manifest: "READ_CALENDAR", runtime: true },
-        { key: "enableWriteCalendar", label: "Write calendar", desc: "Create/edit events", level: "warn", manifest: "WRITE_CALENDAR", runtime: true },
+        { key: "enableReadCalendar", label: "Read calendar", desc: "View events", level: "warn" },
+        { key: "enableWriteCalendar", label: "Write calendar", desc: "Create/edit events", level: "warn" },
       ],
     },
     {
       icon: "🔔", name: "System",
       perms: [
-        { key: "enableNotifications", label: "Notifications", desc: "Push / web notifications (13+)", level: "warn", manifest: "POST_NOTIFICATIONS", runtime: true },
-        { key: "enableForegroundService", label: "Foreground service", desc: "Long-running tasks with notification", manifest: "FOREGROUND_SERVICE" },
-        { key: "enableBootCompleted", label: "Receive boot completed", desc: "Start service on boot", manifest: "RECEIVE_BOOT_COMPLETED" },
-        { key: "enableInstallShortcut", label: "Install shortcuts", desc: "Add home screen shortcuts", manifest: "INSTALL_SHORTCUT" },
-        { key: "enableSystemAlertWindow", label: "Draw over other apps", desc: "Display overlay windows", level: "danger", manifest: "SYSTEM_ALERT_WINDOW" },
-        { key: "enableInstallPackages", label: "Install packages", desc: "Install APK files (dangerous)", level: "danger", manifest: "REQUEST_INSTALL_PACKAGES" },
+        { key: "enableNotifications", label: "Notifications", desc: "Push / web notifications (13+)", level: "warn" },
+        { key: "enableForegroundService", label: "Foreground service", desc: "Long-running tasks with notification" },
+        { key: "enableBootCompleted", label: "Receive boot completed", desc: "Start service on boot" },
+        { key: "enableInstallShortcut", label: "Install shortcuts", desc: "Add home screen shortcuts" },
+        { key: "enableSystemAlertWindow", label: "Draw over other apps", desc: "Display overlay windows", level: "danger" },
+        { key: "enableInstallPackages", label: "Install packages", desc: "Install APK files", level: "danger" },
       ],
     },
     {
       icon: "🔐", name: "Biometric",
       perms: [
-        { key: "enableBiometric", label: "Biometric auth", desc: "Face/fingerprint unlock", level: "warn", manifest: "USE_BIOMETRIC", runtime: true },
-        { key: "enableFingerprint", label: "Fingerprint", desc: "Legacy fingerprint API", level: "warn", manifest: "USE_FINGERPRINT", runtime: true },
+        { key: "enableBiometric", label: "Biometric auth", desc: "Face/fingerprint unlock", level: "warn" },
+        { key: "enableFingerprint", label: "Fingerprint", desc: "Legacy fingerprint API", level: "warn" },
       ],
     },
   ];
 
-  // ────────────────────────────────────────────────────────────────
-  // RENDER PERMISSION UI
-  // ────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // PERMISSION UI
+  // ═══════════════════════════════════════════════════════════════
   const permContainer = document.getElementById("permContainer");
 
   function renderPerms() {
@@ -261,7 +276,6 @@
         </div>`;
     }).join("");
 
-    // Attach change listeners to update counts
     permContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
       cb.addEventListener("change", updateCounts);
     });
@@ -279,7 +293,6 @@
       const el = document.getElementById("catCount" + ci);
       if (el) el.textContent = count;
     });
-    // Save state
     permContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
       localStorage.setItem("perm_" + cb.id, cb.checked ? "1" : "0");
     });
@@ -289,13 +302,8 @@
     const el = permContainer.querySelector(`.perm-cat[data-cat="${ci}"]`);
     if (el) el.classList.toggle("open");
   }
-
-  function expandAll() {
-    permContainer.querySelectorAll(".perm-cat").forEach(el => el.classList.add("open"));
-  }
-  function collapseAll() {
-    permContainer.querySelectorAll(".perm-cat").forEach(el => el.classList.remove("open"));
-  }
+  function expandAll() { permContainer.querySelectorAll(".perm-cat").forEach(el => el.classList.add("open")); }
+  function collapseAll() { permContainer.querySelectorAll(".perm-cat").forEach(el => el.classList.remove("open")); }
   function resetPerms() {
     permContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
       const dflt = cb.dataset.default === "1";
@@ -307,9 +315,9 @@
 
   renderPerms();
 
-  // ────────────────────────────────────────────────────────────────
-  // ICON / COLOR / FORM (same as before)
-  // ────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // ICON / COLOR
+  // ═══════════════════════════════════════════════════════════════
   const form = document.getElementById("buildForm");
   const errorEl = document.getElementById("formError");
   const colorPicker = document.getElementById("themeColor");
@@ -357,9 +365,76 @@
   }
   function setStatus(msg, cls = "") { iconStatus.textContent = msg; iconStatus.className = "icon-status" + (cls ? " " + cls : ""); }
 
-  // ────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // OFFLINE ZIP
+  // ═══════════════════════════════════════════════════════════════
+  const zipInput = document.getElementById("offlineZip");
+  const zipDrop = document.getElementById("zipDrop");
+  const zipStatus = document.getElementById("zipStatus");
+  const zipInfo = document.getElementById("zipInfo");
+  let offlineZipBase64 = null;
+  let offlineZipName = null;
+
+  const ZIP_MAX_BYTES = 3 * 1024 * 1024;
+
+  ["dragenter","dragover"].forEach(ev => zipDrop.addEventListener(ev, e => { e.preventDefault(); zipDrop.classList.add("dragover"); }));
+  ["dragleave","drop"].forEach(ev => zipDrop.addEventListener(ev, e => { e.preventDefault(); zipDrop.classList.remove("dragover"); }));
+  zipDrop.addEventListener("drop", e => {
+    const file = e.dataTransfer?.files?.[0];
+    if (file) { const dt = new DataTransfer(); dt.items.add(file); zipInput.files = dt.files; zipInput.dispatchEvent(new Event("change", { bubbles: true })); }
+  });
+
+  zipInput.addEventListener("change", async () => {
+    const file = zipInput.files?.[0];
+    if (!file) {
+      offlineZipBase64 = null; offlineZipName = null;
+      zipStatus.textContent = ""; zipInfo.style.display = "none";
+      return;
+    }
+    if (file.size > ZIP_MAX_BYTES) {
+      zipStatus.textContent = `✗ ZIP too large (${Math.round(file.size/1024/1024*10)/10} MB, max 3 MB)`;
+      zipStatus.className = "icon-status err";
+      zipInput.value = "";
+      offlineZipBase64 = null; offlineZipName = null;
+      return;
+    }
+    if (!/\.zip$/i.test(file.name)) {
+      zipStatus.textContent = "✗ Only .zip files are accepted";
+      zipStatus.className = "icon-status err";
+      zipInput.value = "";
+      return;
+    }
+
+    zipStatus.textContent = "⏳ Reading ZIP…";
+    zipStatus.className = "icon-status";
+
+    try {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result;
+        const b64 = String(dataUrl).split(",")[1] || "";
+        offlineZipBase64 = b64;
+        offlineZipName = file.name;
+
+        zipStatus.textContent = `✓ ${file.name} (${Math.round(file.size/1024)} KB)`;
+        zipStatus.className = "icon-status ok";
+        zipInfo.style.display = "block";
+        zipInfo.textContent = "Offline mode enabled — app will work without internet (index.html must be in ZIP root).";
+      };
+      reader.onerror = () => {
+        zipStatus.textContent = "✗ Failed to read file";
+        zipStatus.className = "icon-status err";
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      zipStatus.textContent = "✗ " + err.message;
+      zipStatus.className = "icon-status err";
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════
   // SUBMIT
-  // ────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
   const PACKAGE_RE = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/;
 
   form.addEventListener("submit", async (e) => {
@@ -380,14 +455,14 @@
     if (!Number.isInteger(versionCode) || versionCode < 1) return showErr("Version code must be positive integer");
     if (!/^#[0-9a-fA-F]{6}$/.test(themeColor)) return showErr("Theme color must be #rrggbb");
 
-    // Build payload with all permission flags
     const payload = {
       appName, websiteUrl, packageName, versionName, versionCode, themeColor,
       iconBase64: iconImg.dataset.base64 || null,
+      offlineZipBase64: offlineZipBase64 || null,
+      offlineZipName: offlineZipName || null,
       orientation: form.orientation.value,
     };
 
-    // Add every checkbox in permContainer
     permContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
       payload[cb.id] = cb.checked;
     });
