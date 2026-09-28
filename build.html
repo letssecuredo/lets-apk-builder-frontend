@@ -3,8 +3,72 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <title>Build an APK — Let-S APK Builder</title>
-<link rel="stylesheet" href="assets/style.css" />
+<link rel="stylesheet" href="assets/style.css?v=5" />
+<style>
+  .icon-drop {
+    position: relative;
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    background: var(--bg-2);
+    transition: border-color .15s, background .15s;
+    cursor: pointer;
+  }
+  .icon-drop:hover, .icon-drop.dragover {
+    border-color: var(--accent);
+    background: rgba(31, 111, 235, 0.06);
+  }
+  .icon-drop input[type="file"] {
+    position: absolute; inset: 0;
+    opacity: 0; cursor: pointer;
+    width: 100%; height: 100%;
+  }
+  .icon-drop .hint {
+    color: var(--muted);
+    font-size: 13px;
+    margin: 0;
+    pointer-events: none;
+  }
+  .icon-drop .hint strong { color: var(--accent-2); }
+
+  .icon-status {
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: var(--muted);
+    min-height: 16px;
+    text-align: center;
+    word-break: break-word;
+  }
+  .icon-status.ok { color: var(--success); }
+  .icon-status.err { color: var(--danger); }
+
+  .icon-preview-wrap {
+    display: none;
+    margin-top: 12px;
+    text-align: center;
+  }
+  .icon-preview-wrap.show { display: block; }
+  .icon-preview {
+    width: 120px; height: 120px;
+    border-radius: 24px;
+    background: var(--bg-2);
+    border: 2px solid var(--border);
+    object-fit: cover;
+    display: inline-block;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  }
+  .icon-preview-meta {
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: ui-monospace, monospace;
+  }
+</style>
 </head>
 <body>
 <header class="nav">
@@ -52,10 +116,20 @@
       </div>
     </div>
 
-    <div style="margin-top:16px;">
-      <label for="iconFile">App icon (PNG, ≤ 500 KB)</label>
-      <input id="iconFile" type="file" accept="image/png" />
-      <img id="iconPreview" class="icon-preview" alt="Icon preview" />
+    <div style="margin-top:20px;">
+      <label for="iconFile">App icon</label>
+      <div class="icon-drop" id="iconDrop">
+        <input id="iconFile" type="file" accept="image/*" />
+        <p class="hint">
+          <strong>Tap to choose</strong> or drag an image here<br>
+          <span style="font-size:11px;">PNG · JPG · WebP · GIF → auto-converted to 512×512 PNG</span>
+        </p>
+      </div>
+      <p id="iconStatus" class="icon-status"></p>
+      <div id="iconPreviewWrap" class="icon-preview-wrap">
+        <img id="iconPreview" class="icon-preview" alt="Icon preview" />
+        <div class="icon-preview-meta" id="iconPreviewMeta"></div>
+      </div>
     </div>
 
     <div class="grid-2" style="margin-top:16px;">
@@ -72,7 +146,7 @@
         </label>
       </div>
       <div>
-        <label>Permissions & features</label>
+        <label>Permissions &amp; features</label>
         <label style="display:flex;gap:8px;align-items:center;color:var(--text);font-size:14px;">
           <input type="checkbox" id="enableJs" checked /> Enable JavaScript
         </label>
@@ -90,29 +164,128 @@
 
     <div id="formError"></div>
 
-    <div style="margin-top:20px;display:flex;gap:10px;">
+    <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;">
       <button type="submit" class="btn" id="submitBtn">Queue build</button>
       <a href="index.html" class="btn ghost">Cancel</a>
     </div>
   </form>
 </main>
 
-<script src="assets/app.js"></script>
+<script src="assets/app.js?v=5"></script>
 <script>
+  // ────────────────────────────────────────────────────────────────
+  // ELEMENTS
+  // ────────────────────────────────────────────────────────────────
   const form = document.getElementById("buildForm");
   const errorEl = document.getElementById("formError");
   const colorPicker = document.getElementById("themeColor");
   const colorText = document.getElementById("themeColorText");
   const iconFile = document.getElementById("iconFile");
+  const iconDrop = document.getElementById("iconDrop");
   const iconImg = document.getElementById("iconPreview");
+  const iconWrap = document.getElementById("iconPreviewWrap");
+  const iconMeta = document.getElementById("iconPreviewMeta");
+  const iconStatus = document.getElementById("iconStatus");
 
-  colorPicker.addEventListener("input", () => colorText.value = colorPicker.value);
+  // ────────────────────────────────────────────────────────────────
+  // COLOR SYNC
+  // ────────────────────────────────────────────────────────────────
+  colorPicker.addEventListener("input", () => {
+    colorText.value = colorPicker.value;
+  });
   colorText.addEventListener("input", () => {
-    if (/^#[0-9a-fA-F]{6}$/.test(colorText.value)) colorPicker.value = colorText.value;
+    if (/^#[0-9a-fA-F]{6}$/.test(colorText.value)) {
+      colorPicker.value = colorText.value;
+    }
   });
 
-  iconPreview(iconFile, iconImg);
+  // ────────────────────────────────────────────────────────────────
+  // DRAG & DROP
+  // ────────────────────────────────────────────────────────────────
+  ["dragenter", "dragover"].forEach((ev) => {
+    iconDrop.addEventListener(ev, (e) => {
+      e.preventDefault();
+      iconDrop.classList.add("dragover");
+    });
+  });
+  ["dragleave", "drop"].forEach((ev) => {
+    iconDrop.addEventListener(ev, (e) => {
+      e.preventDefault();
+      iconDrop.classList.remove("dragover");
+    });
+  });
+  iconDrop.addEventListener("drop", (e) => {
+    const file = e.dataTransfer?.files?.[0];
+    if (file) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      iconFile.files = dt.files;
+      iconFile.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+  });
 
+  // ────────────────────────────────────────────────────────────────
+  // ICON PROCESSOR (uses functions from app.js)
+  // ────────────────────────────────────────────────────────────────
+  iconFile.addEventListener("change", async () => {
+    const file = iconFile.files?.[0];
+    if (!file) {
+      resetIcon();
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setStatus("✗ Please select an image file (PNG, JPG, WebP…)", "err");
+      iconFile.value = "";
+      resetIcon(true);
+      return;
+    }
+
+    setStatus("⏳ Processing icon…");
+
+    try {
+      const result = await processIcon(file);
+
+      iconImg.src = result.base64;
+      iconImg.dataset.base64 = result.base64;
+      iconWrap.classList.add("show");
+
+      const srcKB = Math.round(result.originalBytes / 1024);
+      const outKB = Math.round(result.bytes / 1024);
+      const ratio = result.originalBytes > 0
+        ? Math.round((1 - result.bytes / result.originalBytes) * 100)
+        : 0;
+
+      iconMeta.textContent = `${result.width}×${result.height} · ${outKB} KB`;
+      setStatus(
+        `✓ Ready — 512×512 PNG, ${outKB} KB ` +
+        `(from ${result.originalWidth}×${result.originalHeight} ${srcKB} KB` +
+        (ratio > 0 ? ` — saved ${ratio}%` : "") + `)`,
+        "ok"
+      );
+    } catch (err) {
+      resetIcon();
+      setStatus("✗ " + (err.message || "Failed to process image"), "err");
+      iconFile.value = "";
+    }
+  });
+
+  function resetIcon(keepStatus) {
+    iconImg.src = "";
+    iconImg.removeAttribute("data-base64");
+    iconWrap.classList.remove("show");
+    iconMeta.textContent = "";
+    if (!keepStatus) setStatus("");
+  }
+
+  function setStatus(msg, cls = "") {
+    iconStatus.textContent = msg;
+    iconStatus.className = "icon-status" + (cls ? " " + cls : "");
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  // FORM SUBMIT
+  // ────────────────────────────────────────────────────────────────
   const PACKAGE_RE = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/;
 
   form.addEventListener("submit", async (e) => {
@@ -126,15 +299,26 @@
     const versionCode = Number(form.versionCode.value);
     const themeColor = colorText.value;
 
-    if (!appName || appName.length > 50) return showErr("App name must be 1-50 characters");
-    if (!/^https:\/\/.+/.test(websiteUrl)) return showErr("Website URL must start with https://");
-    if (!PACKAGE_RE.test(packageName)) return showErr("Package name must look like com.example.app");
-    if (!/^\d+\.\d+\.\d+/.test(versionName)) return showErr("Version name must be semver (e.g. 1.0.0)");
-    if (!Number.isInteger(versionCode) || versionCode < 1) return showErr("Version code must be a positive integer");
-    if (!/^#[0-9a-fA-F]{6}$/.test(themeColor)) return showErr("Theme color must be #rrggbb");
+    if (!appName || appName.length > 50)
+      return showErr("App name must be 1-50 characters");
+    if (!/^https:\/\/.+/.test(websiteUrl))
+      return showErr("Website URL must start with https://");
+    if (!PACKAGE_RE.test(packageName))
+      return showErr("Package name must look like com.example.app");
+    if (!/^\d+\.\d+\.\d+/.test(versionName))
+      return showErr("Version name must be semver (e.g. 1.0.0)");
+    if (!Number.isInteger(versionCode) || versionCode < 1)
+      return showErr("Version code must be a positive integer");
+    if (!/^#[0-9a-fA-F]{6}$/.test(themeColor))
+      return showErr("Theme color must be #rrggbb");
 
     const payload = {
-      appName, websiteUrl, packageName, versionName, versionCode, themeColor,
+      appName,
+      websiteUrl,
+      packageName,
+      versionName,
+      versionCode,
+      themeColor,
       iconBase64: iconImg.dataset.base64 || null,
       orientation: form.orientation.value,
       enableJs: document.getElementById("enableJs").checked,
@@ -144,13 +328,15 @@
     };
 
     const btn = document.getElementById("submitBtn");
-    btn.disabled = true; btn.textContent = "Queueing…";
+    btn.disabled = true;
+    btn.textContent = "Queueing…";
 
     try {
       const { buildId } = await api.createBuild(payload);
       location.href = `status.html?buildId=${encodeURIComponent(buildId)}`;
     } catch (err) {
-      btn.disabled = false; btn.textContent = "Queue build";
+      btn.disabled = false;
+      btn.textContent = "Queue build";
       showErr(err.message);
     }
   });
