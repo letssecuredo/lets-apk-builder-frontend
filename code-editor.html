@@ -9,8 +9,7 @@
 <!-- CodeMirror CSS -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
-<link rel="stylesheet" href="assets/style.css?v=11" />
-<link rel="stylesheet" href="assets/editor.css?v=11" />
+<link rel="stylesheet" href="assets/editor.css?v=12" />
 </head>
 <body class="editor-body">
 
@@ -23,6 +22,9 @@
   <div class="editor-topbar-right">
     <button class="editor-btn editor-btn-ghost" onclick="renameModule()" title="Rename module">
       ✏️ Rename
+    </button>
+    <button class="editor-btn editor-btn-ghost" onclick="downloadZip()" title="Download as ZIP">
+      ⬇️ ZIP
     </button>
     <button class="editor-btn editor-btn-primary" onclick="saveModule()">
       💾 Save
@@ -42,9 +44,7 @@
         <button onclick="createNewFolder()" title="New folder">📁+</button>
       </div>
     </div>
-    <div class="editor-file-tree" id="fileTree">
-      <!-- Dynamically populated -->
-    </div>
+    <div class="editor-file-tree" id="fileTree"></div>
   </aside>
 
   <!-- Editor area -->
@@ -70,9 +70,7 @@
   </main>
 </div>
 
-<!-- ═══════════ MODALS ═══════════ -->
-
-<!-- New file/folder modal -->
+<!-- ═══════════ NEW FILE / FOLDER MODAL ═══════════ -->
 <div class="modal-backdrop" id="modalBackdrop" onclick="closeModal(event)">
   <div class="modal-box" onclick="event.stopPropagation()">
     <h3 id="modalTitle">New File</h3>
@@ -85,7 +83,7 @@
   </div>
 </div>
 
-<!-- Template picker modal -->
+<!-- ═══════════ TEMPLATE PICKER MODAL ═══════════ -->
 <div class="modal-backdrop" id="templateBackdrop" onclick="closeTemplateModal(event)">
   <div class="modal-box modal-box-lg" onclick="event.stopPropagation()">
     <h3>📦 Start from Template</h3>
@@ -118,11 +116,12 @@
   </div>
 </div>
 
-<!-- Toast -->
+<!-- ═══════════ TOAST ═══════════ -->
 <div id="toast" class="toast">Message</div>
 
 <!-- ═══════════ SCRIPTS ═══════════ -->
-<!-- CodeMirror -->
+
+<!-- CodeMirror core + modes -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
@@ -131,11 +130,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
 
-<!-- JSZip -->
+<!-- JSZip for building ZIP in the browser -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <!-- Editor logic -->
-<script src="assets/editor.js?v=11"></script>
+<script src="assets/editor.js?v=12"></script>
 
 </body>
 </html>
