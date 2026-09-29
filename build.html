@@ -663,6 +663,13 @@ form.addEventListener("submit", (e) => {
       offlineZipBase64: appMode === "online" ? null : (offlineZipBase64 || null),
       offlineZipName: appMode === "online" ? null : (offlineZipName || null),
       orientation: form.orientation.value,
+      modules: uploadedModules.map(m => ({
+    id: m.id,
+    name: m.name,
+    base64: m.base64,
+    isMain: m.isMain,
+  })),
+};
     };
 
     permContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
@@ -685,17 +692,24 @@ form.addEventListener("submit", (e) => {
     errorEl.innerHTML = `<div class="error-box">${msg}</div>`;
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+   // Auto-update admin nav link
+document.addEventListener("DOMContentLoaded", () => {
+  const navLink = document.getElementById("adminNavLink");
+  if (!navLink) return;
 
-  // Payload এর মধ্যে এই line যোগ করো:
-const payload = {
-  // ... existing fields ...
-  modules: uploadedModules.map(m => ({
-    id: m.id,
-    name: m.name,
-    base64: m.base64,
-    isMain: m.isMain,
-  })),
-};
+  if (adminAuth.isLoggedIn()) {
+    navLink.textContent = "Admin ✓";
+    navLink.href = "build.html";
+    navLink.addEventListener("click", (e) => {
+      if (confirm("Log out of admin?")) {
+        e.preventDefault();
+        adminAuth.logout();
+        location.href = "index.html";
+      }
+    });
+  }
+});
+
   
 </script>
 </body>
