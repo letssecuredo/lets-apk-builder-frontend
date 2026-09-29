@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<title>Admin Login — Let-S APK Builder</title>
+<link rel="stylesheet" href="assets/style.css?v=10" />
+<style>
+  .login-wrap {
+    max-width: 400px;
+    margin: 60px auto;
+  }
+  .login-wrap h1 {
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .login-wrap .sub {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+  .admin-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: rgba(245, 165, 36, 0.12);
+    border: 1px solid rgba(245, 165, 36, 0.4);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--warning);
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+</style>
+</head>
+<body>
+<header class="nav">
+  <div class="brand">Let-S <span>APK Builder</span></div>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="build.html">Build</a>
+    <a href="builds.html">My Builds</a>
+    <a href="downloads.html">Downloads</a>
+  </nav>
+</header>
+
+<main class="container">
+  <div class="login-wrap">
+    <div style="text-align:center;">
+      <div class="admin-badge">🔐 ADMIN AREA</div>
+    </div>
+    <h1>Admin Login</h1>
+    <p class="sub">Sign in to upload custom modules</p>
+
+    <form id="loginForm" class="card">
+      <div>
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="admin@example.com" autocomplete="username" required />
+      </div>
+      <div style="margin-top:14px;">
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="••••••••" autocomplete="current-password" required />
+      </div>
+
+      <div id="loginError"></div>
+
+      <button type="submit" class="btn btn-block" style="margin-top:20px;" id="loginBtn">
+        Sign in
+      </button>
+
+      <p style="text-align:center;margin-top:14px;font-size:11px;color:var(--muted);">
+        Regular users don't need an account.<br>
+        <a href="build.html">← Back to build page</a>
+      </p>
+    </form>
+  </div>
+</main>
+
+<script src="assets/app.js?v=10"></script>
+<script>
+  const form = document.getElementById("loginForm");
+  const errorEl = document.getElementById("loginError");
+  const btn = document.getElementById("loginBtn");
+
+  // If already logged in, redirect
+  if (localStorage.getItem("admin_token")) {
+    location.href = "build.html";
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorEl.innerHTML = "";
+    btn.disabled = true;
+    btn.textContent = "Signing in…";
+
+    try {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+
+      const res = await fetch(`${API_BASE}/api/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Login failed (${res.status})`);
+
+      // Save token + user
+      localStorage.setItem("admin_token", data.token);
+      localStorage.setItem("admin_user", JSON.stringify(data.user));
+
+      location.href = "build.html";
+    } catch (err) {
+      errorEl.innerHTML = `<div class="error-box">${err.message}</div>`;
+      btn.disabled = false;
+      btn.textContent = "Sign in";
+    }
+  });
+</script>
+</body>
+</html>
