@@ -35,22 +35,18 @@ document.addEventListener("DOMContentLoaded", () => {
   renderFileTree();
   updateModuleLabel();
 
-  // If no current module, offer template
   if (!currentModule) {
     const modules = loadAllModules();
     if (modules.length > 0) {
-      // Load most recent
       currentModule = modules[modules.length - 1];
       saveCurrentSession();
       renderFileTree();
       updateModuleLabel();
     } else {
-      // Show template picker
       setTimeout(() => openTemplateModal(), 300);
     }
   }
 
-  // Before unload — warn if unsaved changes
   window.addEventListener("beforeunload", (e) => {
     if (hasUnsavedChanges()) {
       e.preventDefault();
@@ -58,7 +54,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Keyboard shortcuts
   document.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "s") {
       e.preventDefault();
@@ -142,7 +137,6 @@ function renderFileTree() {
     return;
   }
 
-  // Group by folder
   const folders = {};
   const rootFiles = [];
 
@@ -159,12 +153,10 @@ function renderFileTree() {
 
   let html = "";
 
-  // Root files
   for (const path of rootFiles) {
     html += renderFileItem(path);
   }
 
-  // Folders
   for (const folder of Object.keys(folders).sort()) {
     html += `<div class="file-folder">📁 ${escapeHtml(folder)}</div>`;
     for (const path of folders[folder].sort()) {
@@ -174,7 +166,6 @@ function renderFileTree() {
 
   tree.innerHTML = html;
 
-  // Attach click handlers
   tree.querySelectorAll(".file-item").forEach(el => {
     el.addEventListener("click", (e) => {
       if (e.target.closest(".file-delete")) return;
@@ -218,7 +209,6 @@ function getFileIcon(path) {
 function openFile(path) {
   if (!currentModule) return;
 
-  // Check if already open
   let file = openFiles.find(f => f.path === path);
   if (!file) {
     file = {
@@ -308,7 +298,6 @@ function setEditorMode(path) {
 // ─── Create file ───
 function createNewFile() {
   if (!currentModule) {
-    // Create module first
     createNewModule(() => createNewFile());
     return;
   }
@@ -348,7 +337,6 @@ function confirmModal() {
   if (!value) return;
 
   if (modalMode === "file") {
-    // Create file
     const path = value;
     if (currentModule.files[path] !== undefined) {
       showToast("File already exists");
@@ -361,7 +349,6 @@ function confirmModal() {
     setTimeout(() => openFile(path), 100);
     showToast("✅ File created: " + path);
   } else if (modalMode === "folder") {
-    // Create folder by adding a placeholder .gitkeep
     const path = value.replace(/\/+$/, "") + "/.gitkeep";
     if (currentModule.files[path] !== undefined) {
       showToast("Folder already exists");
@@ -375,7 +362,6 @@ function confirmModal() {
   }
 }
 
-// Enter key in modal input
 document.addEventListener("keydown", (e) => {
   if (document.getElementById("modalBackdrop").classList.contains("show")) {
     if (e.key === "Enter") confirmModal();
@@ -390,7 +376,6 @@ function deleteFile(path) {
 
   delete currentModule.files[path];
 
-  // Also remove from open tabs
   const idx = openFiles.findIndex(f => f.path === path);
   if (idx !== -1) {
     openFiles.splice(idx, 1);
@@ -455,7 +440,6 @@ function updateModuleLabel() {
 function persistModule() {
   if (!currentModule) return;
 
-  // Save all open files back to module
   for (const file of openFiles) {
     currentModule.files[file.path] = file.content;
     file.dirty = false;
@@ -521,7 +505,6 @@ function loadTemplate(type) {
   renderFileTree();
   closeTemplateModal();
 
-  // Auto-open first file
   const firstFile = Object.keys(currentModule.files)[0];
   if (firstFile) setTimeout(() => openFile(firstFile), 200);
 
@@ -594,7 +577,12 @@ class MainActivity : AppCompatActivity() {
 `,
     "manifest.xml": `<activity
     android:name=".MainActivity"
-    android:exported="false" />
+    android:exported="true">
+    <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+    </intent-filter>
+</activity>
 `,
     "deps.gradle": `// Add dependencies here
 `,
@@ -630,6 +618,67 @@ Custom module for Let-S APK Builder.
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// DOWNLOAD AS ZIP
+// ═══════════════════════════════════════════════════════════════
+async function downloadZip() {
+  if (!currentModule) {
+    showToast("No module to download");
+    return;
+  }
+
+  // Persist open files first
+  persistModule();
+
+  const files = currentModule.files || {};
+  const fileKeys = Object.keys(files).filter(p => !p.endsWith(".gitkeep"));
+
+  if (fileKeys.length === 0) {
+    showToast("⚠️ Module is empty — add some files first");
+    return;
+  }
+
+  // Check for module.json (required)
+  if (!files["module.json"]) {
+    const proceed = confirm(
+      "⚠️ This module has no module.json file.\n\n" +
+      "Without module.json, the module won't work in the builder.\n\n" +
+      "Download anyway?"
+    );
+    if (!proceed) return;
+  }
+
+  try {
+    showToast("⏳ Building ZIP…");
+
+    const zip = new JSZip();
+    for (const path of fileKeys) {
+      zip.file(path, files[path] || "");
+    }
+
+    const blob = await zip.generateAsync({
+      type: "blob",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${currentModule.name || "module"}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    const sizeKB = Math.round(blob.size / 1024);
+    showToast(`✅ Downloaded: ${currentModule.name}.zip (${sizeKB} KB)`);
+  } catch (err) {
+    console.error("ZIP download failed:", err);
+    showToast("✗ Failed: " + err.message);
+  }
+}
+
 // ─── Toast ───
 let toastTimer = null;
 function showToast(message, duration = 2000) {
@@ -646,3 +695,15 @@ function escapeHtml(s) {
     "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;",
   }[c] || c));
 }
+
+// ─── Expose globals for inline onclick ───
+window.downloadZip = downloadZip;
+window.renameModule = renameModule;
+window.saveModule = saveModule;
+window.createNewFile = createNewFile;
+window.createNewFolder = createNewFolder;
+window.openTemplateModal = openTemplateModal;
+window.closeTemplateModal = closeTemplateModal;
+window.closeModal = closeModal;
+window.confirmModal = confirmModal;
+window.loadTemplate = loadTemplate;
