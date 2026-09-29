@@ -1,15 +1,57 @@
-/* Let-S APK Builder — frontend API client + icon processor */
+/* Let-S APK Builder — frontend API client + helpers */
 const API_BASE = (window.API_BASE || "https://lets-apk-builder.onrender.com").replace(/\/+$/, "");
 
+// ═══════════════════════════════════════════════════════════════
+// ADMIN AUTH
+// ═══════════════════════════════════════════════════════════════
+const adminAuth = {
+  getToken() {
+    return localStorage.getItem("admin_token");
+  },
+
+  getUser() {
+    try {
+      return JSON.parse(localStorage.getItem("admin_user") || "null");
+    } catch {
+      return null;
+    }
+  },
+
+  isLoggedIn() {
+    return !!this.getToken();
+  },
+
+  logout() {
+    localStorage.removeItem("admin_token");
+    localStorage.removeItem("admin_user");
+  },
+
+  authHeaders() {
+    const token = this.getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// API CLIENT
+// ═══════════════════════════════════════════════════════════════
 const api = {
   async createBuild(payload) {
     const res = await fetch(`${API_BASE}/api/build`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...adminAuth.authHeaders(),
+      },
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    if (!res.ok) {
+      const err = new Error(data.error || `Request failed (${res.status})`);
+      err.status = res.status;
+      err.code = data.code;
+      throw err;
+    }
     return data;
   },
 
@@ -27,11 +69,24 @@ const api = {
     return data.builds || [];
   },
 
-  downloadUrl(id) { return `${API_BASE}/api/download/${id}`; },
+  async listCommonModules() {
+    const res = await fetch(`${API_BASE}/api/common-modules?_=${Date.now()}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Failed to load modules`);
+    return data.modules || [];
+  },
+
+  downloadUrl(id) {
+    return `${API_BASE}/api/download/${id}`;
+  },
 };
 
-/* ---------- UI helpers ---------- */
-function qs(name) { return new URLSearchParams(location.search).get(name); }
+// ═══════════════════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════════════════
+function qs(name) {
+  return new URLSearchParams(location.search).get(name);
+}
 
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -42,20 +97,22 @@ function fileToBase64(file) {
   });
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   ICON PROCESSOR
-   - Any image (PNG/JPG/WEBP/GIF) → 512×512 PNG
-   - Center-crop to square
-   - 8-bit RGBA PNG (AAPT2-safe)
-   - Auto-compress until ≤500 KB
-   ══════════════════════════════════════════════════════════════════ */
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[<>&"']/g, (c) => ({
+    "<": "&lt;",
+    ">": "&gt;",
+    "&": "&amp;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[c] || c));
+}
 
-const ICON_TARGET_SIZE = 512;         // px (square)
-const ICON_MAX_BYTES = 500 * 1024;    // 500 KB
+// ═══════════════════════════════════════════════════════════════
+// ICON PROCESSOR
+// ═══════════════════════════════════════════════════════════════
+const ICON_TARGET_SIZE = 512;
+const ICON_MAX_BYTES = 500 * 1024;
 
-/**
- * Load a File into an HTMLImageElement.
- */
 function loadImage(file) {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -64,32 +121,23 @@ function loadImage(file) {
       URL.revokeObjectURL(url);
       resolve(img);
     };
-    img.onerror = (e) => {
+    img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(new Error("Could not decode image. Is it a valid image file?"));
+      reject(new Error("Cannot decode image"));
     };
     img.src = url;
   });
 }
 
-/**
- * Draw image on a square canvas with center-crop, return base64 PNG.
- * Uses iterative quality (via canvas.toBlob quality) to stay under max bytes.
- */
-async function iconToPngBase64(img, size, quality) {
+async function iconToPngBase64(img, size) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d");
-
-  // Enable high-quality scaling
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-
-  // Fill with transparent background
   ctx.clearRect(0, 0, size, size);
 
-  // Center-crop source to square
   const sw = img.naturalWidth || img.width;
   const sh = img.naturalHeight || img.height;
   const side = Math.min(sw, sh);
@@ -98,9 +146,8 @@ async function iconToPngBase64(img, size, quality) {
 
   ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
 
-  // Prefer toBlob to control quality (PNG ignores quality param but keeps API consistency)
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png", quality));
-  if (!blob) throw new Error("Canvas toBlob failed");
+  const blob = await new Promise((r) => canvas.toBlob(r, "image/png", 0.92));
+  if (!blob) throw new Error("Canvas failed");
 
   const dataUrl = await new Promise((resolve, reject) => {
     const fr = new FileReader();
@@ -112,29 +159,16 @@ async function iconToPngBase64(img, size, quality) {
   return { dataUrl, bytes: blob.size };
 }
 
-/**
- * Process an icon file and return:
- *   { base64: "data:image/png;base64,...", bytes, width, height, originalBytes }
- *
- * Steps:
- *   1. Decode any image (PNG/JPG/WebP/GIF/etc)
- *   2. If < 512 or > 512, scale with center-crop
- *   3. Re-encode as PNG (8-bit RGBA)
- *   4. If PNG > 500 KB, downscale target size (512 → 384 → 256 → 192)
- *   5. Return the best result
- */
 async function processIcon(file) {
   const img = await loadImage(file);
   const sw = img.naturalWidth || img.width;
   const sh = img.naturalHeight || img.height;
-
-  // Try progressively smaller canvas sizes to fit the byte budget
   const candidates = [ICON_TARGET_SIZE, 384, 256, 192, 128];
 
-  let lastResult = null;
+  let last = null;
   for (const size of candidates) {
-    const result = await iconToPngBase64(img, size, 0.92);
-    lastResult = result;
+    const result = await iconToPngBase64(img, size);
+    last = result;
     if (result.bytes <= ICON_MAX_BYTES) {
       return {
         base64: result.dataUrl,
@@ -147,119 +181,28 @@ async function processIcon(file) {
       };
     }
   }
-
-  throw new Error(
-    `Icon too large even after compression (${Math.round(lastResult.bytes / 1024)} KB). ` +
-    `Try a simpler image.`
-  );
+  throw new Error(`Icon too large (${Math.round(last.bytes / 1024)} KB)`);
 }
 
-/**
- * Attach to a file input. On change:
- *   - processes the icon
- *   - shows preview + status text
- *   - stores base64 in imgEl.dataset.base64
- */
-function iconPreview(inputEl, imgEl, statusEl) {
-  inputEl.addEventListener("change", async () => {
-    const file = inputEl.files?.[0];
-    if (!file) {
-      imgEl.style.display = "none";
-      imgEl.dataset.base64 = "";
-      if (statusEl) statusEl.textContent = "";
-      return;
-    }
+// ═══════════════════════════════════════════════════════════════
+// NAVBAR — auto update admin link
+// ═══════════════════════════════════════════════════════════════
+document.addEventListener("DOMContentLoaded", () => {
+  const navLink = document.getElementById("adminNavLink");
+  if (!navLink) return;
 
-    // Basic sanity check
-    if (!file.type.startsWith("image/")) {
-      showIconError("Please select an image file (PNG, JPG, WebP…)");
-      inputEl.value = "";
-      return;
-    }
+  if (adminAuth.isLoggedIn()) {
+    const user = adminAuth.getUser();
+    navLink.textContent = "Admin ✓";
+    navLink.href = "build.html";
+    navLink.title = `Logged in as ${user?.email || "admin"}`;
 
-    if (statusEl) statusEl.textContent = "Processing…";
-
-    try {
-      const result = await processIcon(file);
-
-      imgEl.src = result.base64;
-      imgEl.style.display = "block";
-      imgEl.dataset.base64 = result.base64;
-      imgEl.dataset.width = String(result.width);
-      imgEl.dataset.height = String(result.height);
-
-      if (statusEl) {
-        const srcKB = Math.round(result.originalBytes / 1024);
-        const outKB = Math.round(result.bytes / 1024);
-        statusEl.textContent =
-          `✓ Ready — ${result.width}×${result.height} PNG, ${outKB} KB ` +
-          `(from ${result.originalWidth}×${result.originalHeight} ${srcKB} KB)`;
-        statusEl.style.color = "var(--success)";
+    navLink.addEventListener("click", (e) => {
+      if (confirm("Log out of admin?")) {
+        e.preventDefault();
+        adminAuth.logout();
+        location.href = "index.html";
       }
-    } catch (err) {
-      showIconError(err.message);
-      inputEl.value = "";
-      imgEl.style.display = "none";
-      imgEl.dataset.base64 = "";
-      if (statusEl) statusEl.textContent = "";
-    }
-  });
-
-  function showIconError(msg) {
-    if (statusEl) {
-      statusEl.textContent = "✗ " + msg;
-      statusEl.style.color = "var(--danger)";
-    } else {
-      alert(msg);
-    }
+    });
   }
-}
-
-/* ═══════════════════════════════════════════════
-   ADMIN AUTH HELPERS
-   ═══════════════════════════════════════════════ */
-
-const adminAuth = {
-  getToken() {
-    return localStorage.getItem("admin_token");
-  },
-
-  getUser() {
-    try {
-      return JSON.parse(localStorage.getItem("admin_user") || "null");
-    } catch { return null; }
-  },
-
-  isLoggedIn() {
-    return !!this.getToken();
-  },
-
-  logout() {
-    localStorage.removeItem("admin_token");
-    localStorage.removeItem("admin_user");
-  },
-
-  authHeaders() {
-    const token = this.getToken();
-    if (!token) return {};
-    return { Authorization: `Bearer ${token}` };
-  },
-};
-
-/**
- * Add auth headers to build POST if admin logged in.
- */
-const _originalCreateBuild = api.createBuild.bind(api);
-api.createBuild = async function(payload) {
-  const res = await fetch(`${API_BASE}/api/build`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...adminAuth.authHeaders(),
-    },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
-  return data;
-};
+});
