@@ -7,7 +7,11 @@
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <title>Build an APK — Let-S APK Builder</title>
-<link rel="stylesheet" href="assets/style.css?v=10" />
+
+<!-- JSZip for in-browser module ZIP creation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<link rel="stylesheet" href="assets/style.css?v=11" />
 <style>
   .icon-drop { position:relative; border:2px dashed var(--border); border-radius:12px; padding:20px; text-align:center; background:var(--bg-2); transition:.15s; cursor:pointer; }
   .icon-drop:hover,.icon-drop.dragover { border-color:var(--accent); background:rgba(31,111,235,.06); }
@@ -46,7 +50,7 @@
   .perm-actions button { font-size:11px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--muted); cursor:pointer; }
   .perm-actions button:hover { color:var(--text); border-color:var(--accent-2); }
 
-  /* Mode selector */
+  /* Mode/app-type selector */
   .mode-grid { display:grid; grid-template-columns:1fr; gap:10px; margin-top:10px; }
   @media (min-width:640px) { .mode-grid { grid-template-columns:repeat(3, 1fr); } }
   .mode-card { display:flex; flex-direction:column; gap:6px; padding:14px; border:2px solid var(--border); border-radius:12px; background:var(--bg-2); cursor:pointer; transition:border-color .15s, background .15s; position:relative; }
@@ -81,7 +85,7 @@
     font-size:10px; color:var(--warning); font-weight:700; letter-spacing:.5px;
   }
 
-  /* Module list (uploaded) */
+  /* Module list item (uploaded ZIPs) */
   .module-list-item {
     display:flex; align-items:center; justify-content:space-between;
     padding:8px 12px; background:rgba(255,255,255,.02);
@@ -92,6 +96,39 @@
     background:none; border:none; color:var(--danger); cursor:pointer;
     font-size:16px; padding:2px 6px;
   }
+
+  /* Saved code-editor modules */
+  .saved-mod-item {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 12px; background:var(--bg-2);
+    border:1px solid var(--border); border-radius:10px;
+    margin-bottom:6px; cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .saved-mod-item.checked {
+    border-color:var(--accent); background:rgba(31,111,235,.08);
+  }
+  .saved-mod-item input[type="checkbox"] {
+    width:16px; height:16px; flex-shrink:0;
+  }
+  .saved-mod-info { flex:1; min-width:0; }
+  .saved-mod-name { font-size:13px; font-weight:600; color:var(--text); }
+  .saved-mod-meta { font-size:11px; color:var(--muted); }
+  .saved-mod-del {
+    background:none; border:none; color:var(--danger);
+    cursor:pointer; font-size:14px; padding:4px 6px;
+  }
+
+  /* Write Code button */
+  .write-code-btn {
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    padding:14px 20px; border-radius:12px; font-weight:700; font-size:14px;
+    background:linear-gradient(135deg, #1f6feb, #63a1ff); color:#fff;
+    border:none; cursor:pointer; transition:transform .15s, box-shadow .15s;
+    box-shadow:0 4px 16px rgba(31,111,235,.3);
+  }
+  .write-code-btn:active { transform:translateY(1px); }
+  .write-code-btn:hover { box-shadow:0 8px 24px rgba(31,111,235,.4); }
 
   .field-hidden { display:none !important; }
   .req-badge { font-size:10px; color:var(--danger); margin-left:6px; font-weight:600; }
@@ -115,8 +152,9 @@
   <p style="color:var(--muted);margin-top:0;">Choose app mode, add modules, pick permissions.</p>
 
   <form id="buildForm" class="card" novalidate>
-    <!-- ═══════ APP MODE ═══════ -->
-    <div style="margin-bottom:20px;">
+
+    <!-- ═══════════ APP MODE ═══════════ -->
+    <div style="margin-bottom:22px;">
       <label>App mode</label>
       <div class="mode-grid" id="modeGrid">
         <label class="mode-card selected" data-mode="hybrid">
@@ -140,7 +178,7 @@
       </div>
     </div>
 
-    <!-- ═══════ BASIC INFO ═══════ -->
+    <!-- ═══════════ BASIC INFO ═══════════ -->
     <div class="grid-2">
       <div><label for="appName">App name</label><input id="appName" name="appName" type="text" placeholder="My App" maxlength="50" required /></div>
       <div id="urlField">
@@ -159,7 +197,7 @@
       </div>
     </div>
 
-    <!-- ═══════ ICON ═══════ -->
+    <!-- ═══════════ ICON ═══════════ -->
     <div style="margin-top:20px;">
       <label for="iconFile">App icon</label>
       <div class="icon-drop" id="iconDrop">
@@ -173,7 +211,7 @@
       </div>
     </div>
 
-    <!-- ═══════ COMMON MODULES ═══════ -->
+    <!-- ═══════════ COMMON MODULES ═══════════ -->
     <div id="commonModuleSection" style="margin-top:22px;">
       <label>Common modules</label>
       <p style="font-size:11px;color:var(--muted);margin:0 0 10px;">
@@ -184,27 +222,39 @@
       </div>
     </div>
 
-    <!-- ═══════ ADMIN: CUSTOM MODULES ═══════ -->
+    <!-- ═══════════ ADMIN: CUSTOM MODULES ═══════════ -->
     <div id="adminModuleSection" style="display:none;margin-top:22px;">
       <label style="display:flex;align-items:center;gap:10px;">
         <span>Custom modules</span>
         <span class="admin-badge">🔐 ADMIN</span>
       </label>
-      <p style="font-size:11px;color:var(--muted);margin:8px 0;">
-        Upload Kotlin modules (ZIP). Must include <code>module.json</code> at root.
+      <p style="font-size:11px;color:var(--muted);margin:8px 0 12px;">
+        Write code in browser or upload a ZIP. Max 5 MB per module.
       </p>
-      <div class="icon-drop" id="moduleDrop">
-        <input id="moduleFiles" type="file" accept=".zip,application/zip" multiple />
-        <p class="hint">
-          <strong>Tap to choose</strong> module ZIP(s)<br>
-          <span style="font-size:11px;">Max 5 MB each · Max 10 modules</span>
-        </p>
+
+      <!-- Two action buttons -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <button type="button" class="write-code-btn" onclick="openCodeEditor()">
+          ✏️ Write Code
+        </button>
+        <button type="button" class="btn secondary" onclick="document.getElementById('moduleFiles').click()" style="margin:0;">
+          📁 Upload ZIP
+        </button>
       </div>
-      <ul id="moduleList" style="list-style:none;padding:0;margin:10px 0 0;"></ul>
+
+      <!-- Hidden ZIP upload input -->
+      <input id="moduleFiles" type="file" accept=".zip,application/zip" multiple style="display:none;" />
+
+      <!-- Uploaded ZIP list -->
+      <ul id="moduleList" style="list-style:none;padding:0;margin:0;"></ul>
+
+      <!-- Saved code-editor modules list -->
+      <div id="savedCodeModules"></div>
+
       <p id="moduleError" class="icon-status err" style="display:none;"></p>
     </div>
 
-    <!-- ═══════ OFFLINE ZIP ═══════ -->
+    <!-- ═══════════ OFFLINE ZIP ═══════════ -->
     <div style="margin-top:22px;" id="zipField">
       <label>Offline bundle (ZIP)<span id="zipBadge" class="opt-badge">optional</span></label>
       <div class="icon-drop" id="zipDrop">
@@ -218,7 +268,7 @@
       <div id="zipInfo" style="display:none;margin-top:8px;font-size:12px;color:var(--success);text-align:center;"></div>
     </div>
 
-    <!-- ═══════ ORIENTATION ═══════ -->
+    <!-- ═══════════ ORIENTATION ═══════════ -->
     <div style="margin-top:16px;">
       <label>Orientation</label>
       <label style="display:flex;gap:8px;align-items:center;color:var(--text);font-size:14px;"><input type="radio" name="orientation" value="portrait" checked /> Portrait</label>
@@ -226,7 +276,7 @@
       <label style="display:flex;gap:8px;align-items:center;color:var(--text);font-size:14px;"><input type="radio" name="orientation" value="auto" /> Auto</label>
     </div>
 
-    <!-- ═══════ PERMISSIONS ═══════ -->
+    <!-- ═══════════ PERMISSIONS ═══════════ -->
     <div class="perm-section">
       <label>Permissions &amp; features</label>
       <div class="perm-actions">
@@ -246,7 +296,7 @@
   </form>
 </main>
 
-<script src="assets/app.js?v=10"></script>
+<script src="assets/app.js?v=11"></script>
 <script>
   // ═══════════════════════════════════════════════════════════
   // MODE SELECTOR
@@ -577,17 +627,16 @@
         });
       });
     } catch (err) {
-      commonModuleGrid.innerHTML = `<div style="color:var(--danger);font-size:13px;padding:12px;">Failed to load modules: ${escapeHtml(err.message)}</div>`;
+      commonModuleGrid.innerHTML = `<div style="color:var(--muted);font-size:13px;padding:12px;">No modules available</div>`;
     }
   }
   loadCommonModules();
 
   // ═══════════════════════════════════════════════════════════
-  // ADMIN: CUSTOM MODULES
+  // ADMIN: ZIP UPLOADED MODULES
   // ═══════════════════════════════════════════════════════════
   const adminModuleSection = document.getElementById("adminModuleSection");
   const moduleFiles = document.getElementById("moduleFiles");
-  const moduleDrop = document.getElementById("moduleDrop");
   const moduleList = document.getElementById("moduleList");
   const moduleError = document.getElementById("moduleError");
 
@@ -647,18 +696,146 @@
 
   if (moduleFiles) {
     moduleFiles.addEventListener("change", () => handleModuleFiles(moduleFiles.files));
-    moduleDrop.addEventListener("drop", (e) => {
-      e.preventDefault(); moduleDrop.classList.remove("dragover");
-      if (e.dataTransfer?.files) handleModuleFiles(e.dataTransfer.files);
-    });
-    ["dragenter","dragover"].forEach(ev => moduleDrop.addEventListener(ev, e => { e.preventDefault(); moduleDrop.classList.add("dragover"); }));
-    ["dragleave"].forEach(ev => moduleDrop.addEventListener(ev, e => { e.preventDefault(); moduleDrop.classList.remove("dragover"); }));
   }
 
   // Show admin section if logged in
   if (adminAuth.isLoggedIn()) {
     adminModuleSection.style.display = "block";
   }
+
+  // ═══════════════════════════════════════════════════════════
+  // CODE EDITOR MODULES (localStorage)
+  // ═══════════════════════════════════════════════════════════
+  const EDITOR_STORAGE_KEY = "builder_editor_modules";
+  const savedCodeModulesContainer = document.getElementById("savedCodeModules");
+  let codeEditorModules = [];
+  let selectedCodeModuleIds = [];
+
+  function openCodeEditor() {
+    window.open("code-editor.html", "_blank");
+  }
+
+  function loadCodeEditorModules() {
+    try {
+      const raw = localStorage.getItem(EDITOR_STORAGE_KEY);
+      codeEditorModules = raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      codeEditorModules = [];
+    }
+    // Filter selected IDs that still exist
+    selectedCodeModuleIds = selectedCodeModuleIds.filter(
+      id => codeEditorModules.some(m => m.id === id)
+    );
+    renderSavedCodeModules();
+  }
+
+  function renderSavedCodeModules() {
+    if (!savedCodeModulesContainer) return;
+
+    if (codeEditorModules.length === 0) {
+      savedCodeModulesContainer.innerHTML = "";
+      return;
+    }
+
+    savedCodeModulesContainer.innerHTML = `
+      <div style="font-size:11px;color:var(--muted);margin:14px 0 8px;">
+        <strong style="color:var(--accent-2);">📝 Saved from Code Editor</strong>
+        <span style="margin-left:6px;">— tick to include in this build</span>
+      </div>
+      ${codeEditorModules.map(m => {
+        const fileCount = Object.keys(m.files || {}).filter(p => !p.endsWith(".gitkeep")).length;
+        const included = selectedCodeModuleIds.includes(m.id);
+        return `
+          <label class="saved-mod-item ${included ? "checked" : ""}">
+            <input type="checkbox" ${included ? "checked" : ""} onchange="toggleCodeModule('${m.id}', this.checked)" />
+            <div class="saved-mod-info">
+              <div class="saved-mod-name">📝 ${escapeHtml(m.name)}</div>
+              <div class="saved-mod-meta">${fileCount} file(s) · saved ${formatRelativeTime(m.createdAt)}</div>
+            </div>
+            <button type="button" class="saved-mod-del" onclick="event.preventDefault();deleteCodeModule('${m.id}')" title="Delete">✕</button>
+          </label>
+        `;
+      }).join("")}
+    `;
+  }
+
+  window.toggleCodeModule = function(id, checked) {
+    if (checked) {
+      if (!selectedCodeModuleIds.includes(id)) selectedCodeModuleIds.push(id);
+    } else {
+      selectedCodeModuleIds = selectedCodeModuleIds.filter(x => x !== id);
+    }
+    renderSavedCodeModules();
+  };
+
+  window.deleteCodeModule = function(id) {
+    if (!confirm("Delete this module permanently?")) return;
+    codeEditorModules = codeEditorModules.filter(m => m.id !== id);
+    localStorage.setItem(EDITOR_STORAGE_KEY, JSON.stringify(codeEditorModules));
+    selectedCodeModuleIds = selectedCodeModuleIds.filter(x => x !== id);
+    renderSavedCodeModules();
+    showToast("Module deleted");
+  };
+
+  function formatRelativeTime(ts) {
+    if (!ts) return "just now";
+    const diff = Date.now() - ts;
+    if (diff < 60000) return "just now";
+    if (diff < 3600000) return Math.floor(diff / 60000) + "m ago";
+    if (diff < 86400000) return Math.floor(diff / 3600000) + "h ago";
+    return Math.floor(diff / 86400000) + "d ago";
+  }
+
+  async function convertCodeModulesToZips() {
+    if (selectedCodeModuleIds.length === 0) return [];
+
+    const results = [];
+    for (const moduleId of selectedCodeModuleIds) {
+      const mod = codeEditorModules.find(m => m.id === moduleId);
+      if (!mod) continue;
+
+      try {
+        const zip = new JSZip();
+        let fileCount = 0;
+
+        for (const [path, content] of Object.entries(mod.files || {})) {
+          if (path.endsWith("/.gitkeep")) continue;
+          zip.file(path, content || "");
+          fileCount++;
+        }
+
+        if (fileCount === 0) {
+          console.warn("Module has no files:", mod.name);
+          continue;
+        }
+
+        const base64 = await zip.generateAsync({
+          type: "base64",
+          compression: "DEFLATE",
+          compressionOptions: { level: 6 },
+        });
+
+        const size = Math.floor((base64.length * 3) / 4);
+
+        results.push({
+          id: mod.id,
+          name: mod.name + ".zip",
+          base64,
+          size,
+          isMain: results.length === 0 && uploadedModules.length === 0,
+        });
+      } catch (err) {
+        console.warn("Failed to convert module:", mod.name, err);
+      }
+    }
+    return results;
+  }
+
+  // Initial load + refresh on focus (user returns from editor tab)
+  loadCodeEditorModules();
+  window.addEventListener("focus", loadCodeEditorModules);
+  // Also refresh periodically (for multi-tab UX)
+  setInterval(loadCodeEditorModules, 3000);
 
   // ═══════════════════════════════════════════════════════════
   // SUBMIT
@@ -692,9 +869,47 @@
     if (!Number.isInteger(versionCode) || versionCode < 1) return showErr("Version code must be positive");
     if (!/^#[0-9a-fA-F]{6}$/.test(themeColor)) return showErr("Theme color must be #rrggbb");
 
-    // Custom modules: only if admin
-    if (uploadedModules.length > 0 && !adminAuth.isLoggedIn()) {
-      return showErr("Custom modules require admin login. Visit Admin page to sign in.");
+    // Admin check for custom modules
+    const hasCustomModules = uploadedModules.length > 0 || selectedCodeModuleIds.length > 0;
+    if (hasCustomModules && !adminAuth.isLoggedIn()) {
+      return showErr("🔐 Custom modules need admin login. <a href='admin-login.html'>Login here →</a>");
+    }
+
+    // Convert code-editor modules to ZIPs
+    let codeModuleZips = [];
+    if (selectedCodeModuleIds.length > 0) {
+      showToast("Converting code modules…");
+      try {
+        codeModuleZips = await convertCodeModulesToZips();
+      } catch (err) {
+        return showErr("Failed to convert code modules: " + err.message);
+      }
+    }
+
+    // Merge modules
+    const allModules = [
+      ...uploadedModules.map((m, i) => ({
+        id: m.id,
+        name: m.name,
+        base64: m.base64,
+        isMain: i === 0,
+      })),
+      ...codeModuleZips,
+    ];
+
+    // Ensure exactly one main
+    if (allModules.length > 0) {
+      const mainCount = allModules.filter(m => m.isMain).length;
+      if (mainCount === 0) allModules[0].isMain = true;
+      if (mainCount > 1) {
+        let first = true;
+        allModules.forEach(m => {
+          if (m.isMain) {
+            if (first) { first = false; }
+            else { m.isMain = false; }
+          }
+        });
+      }
     }
 
     const payload = {
@@ -706,9 +921,7 @@
       offlineZipName: appMode === "online" ? null : (offlineZipName || null),
       orientation: form.orientation.value,
       commonModules: Array.from(selectedCommonModules),
-      modules: uploadedModules.map(m => ({
-        id: m.id, name: m.name, base64: m.base64, isMain: m.isMain,
-      })),
+      modules: allModules,
     };
 
     permContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
@@ -736,6 +949,23 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  // Toast helper (if not in app.js)
+  let _toastTimer = null;
+  function showToast(message, duration = 2000) {
+    let toast = document.getElementById("toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "toast";
+      toast.className = "toast";
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add("show");
+    if (_toastTimer) clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => toast.classList.remove("show"), duration);
+  }
+
+  // Apply initial mode
   applyMode();
 </script>
 </body>
