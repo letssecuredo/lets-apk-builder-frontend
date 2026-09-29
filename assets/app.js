@@ -214,3 +214,52 @@ function iconPreview(inputEl, imgEl, statusEl) {
     }
   }
 }
+
+/* ═══════════════════════════════════════════════
+   ADMIN AUTH HELPERS
+   ═══════════════════════════════════════════════ */
+
+const adminAuth = {
+  getToken() {
+    return localStorage.getItem("admin_token");
+  },
+
+  getUser() {
+    try {
+      return JSON.parse(localStorage.getItem("admin_user") || "null");
+    } catch { return null; }
+  },
+
+  isLoggedIn() {
+    return !!this.getToken();
+  },
+
+  logout() {
+    localStorage.removeItem("admin_token");
+    localStorage.removeItem("admin_user");
+  },
+
+  authHeaders() {
+    const token = this.getToken();
+    if (!token) return {};
+    return { Authorization: `Bearer ${token}` };
+  },
+};
+
+/**
+ * Add auth headers to build POST if admin logged in.
+ */
+const _originalCreateBuild = api.createBuild.bind(api);
+api.createBuild = async function(payload) {
+  const res = await fetch(`${API_BASE}/api/build`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...adminAuth.authHeaders(),
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+};
