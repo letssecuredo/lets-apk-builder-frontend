@@ -8,7 +8,7 @@
 
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
-<link rel="stylesheet" href="assets/editor.css?v=14" />
+<link rel="stylesheet" href="assets/editor.css?v=15" />
 </head>
 <body class="editor-body">
 
@@ -17,11 +17,13 @@
   <div class="editor-topbar-left">
     <a href="build.html" class="editor-back-btn" title="Back to Build">←</a>
     <div class="editor-module-name" id="moduleNameLabel">untitled-project</div>
+    <span class="dirty-indicator" id="globalDirtyIndicator" style="display:none;">● unsaved</span>
   </div>
   <div class="editor-topbar-right">
-    <button class="editor-btn editor-btn-ghost" onclick="renameProject()" title="Rename project">✏️</button>
-    <button class="editor-btn editor-btn-ghost" onclick="downloadZip()" title="Download ZIP">⬇️ ZIP</button>
-    <button class="editor-btn editor-btn-primary" onclick="saveProject()">💾 Save</button>
+    <button class="editor-btn editor-btn-ghost" onclick="formatCode()" title="Format code">✨</button>
+    <button class="editor-btn editor-btn-ghost" onclick="showHistory()" title="Version history">🕐</button>
+    <button class="editor-btn editor-btn-ghost" onclick="showToolsMenu()" title="More">⋯</button>
+    <button class="editor-btn editor-btn-primary" onclick="saveProject()" title="Save">💾</button>
   </div>
 </header>
 
@@ -55,7 +57,12 @@
         </div>
       </div>
 
-      <!-- Breadcrumb for folder context -->
+      <!-- File search -->
+      <div class="file-search">
+        <input type="text" id="fileSearch" placeholder="🔍 Search files…" oninput="filterFiles()" />
+      </div>
+
+      <!-- Folder breadcrumb -->
       <div class="folder-breadcrumb" id="folderBreadcrumb" style="display:none;">
         <button class="crumb-btn" onclick="goToRoot()">🏠 Root</button>
         <span id="breadcrumbPath"></span>
@@ -80,6 +87,7 @@
     </div>
     <div class="editor-statusbar">
       <span id="filePathLabel">—</span>
+      <span id="saveStatus"></span>
       <span id="cursorPos">Ln 1, Col 1</span>
     </div>
   </main>
@@ -162,6 +170,87 @@
   </div>
 </div>
 
+<!-- ═══════════ TOOLS MENU MODAL ═══════════ -->
+<div class="modal-backdrop" id="toolsMenuBackdrop" onclick="closeToolsMenu(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3>⚙️ Tools & Actions</h3>
+    <div class="project-menu">
+      <button class="project-menu-btn" onclick="menuRenameCurrentProject()">✏️ Rename project</button>
+      <button class="project-menu-btn" onclick="menuDuplicateCurrentProject()">📋 Duplicate project</button>
+      <button class="project-menu-btn" onclick="menuFormatCurrentFile()">✨ Format current file</button>
+      <button class="project-menu-btn" onclick="menuExportAll()">📥 Export all projects (JSON)</button>
+      <button class="project-menu-btn" onclick="menuImportAll()">📤 Import projects (JSON)</button>
+      <button class="project-menu-btn" onclick="menuDownloadCurrent()">⬇️ Download current ZIP</button>
+      <button class="project-menu-btn danger" onclick="menuDeleteCurrentProject()">🗑️ Delete current project</button>
+    </div>
+    <div class="modal-actions">
+      <button class="editor-btn editor-btn-ghost" onclick="closeToolsMenu()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ FILE MENU MODAL ═══════════ -->
+<div class="modal-backdrop" id="fileMenuBackdrop" onclick="closeFileMenu(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3 id="fileMenuTitle">File Actions</h3>
+    <div class="project-menu">
+      <button class="project-menu-btn" onclick="fileMenuRename()">✏️ Rename</button>
+      <button class="project-menu-btn" onclick="fileMenuDuplicate()">📋 Duplicate</button>
+      <button class="project-menu-btn" onclick="fileMenuMove()">📁 Move to folder</button>
+      <button class="project-menu-btn danger" onclick="fileMenuDelete()">🗑️ Delete</button>
+    </div>
+    <div class="modal-actions">
+      <button class="editor-btn editor-btn-ghost" onclick="closeFileMenu()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ MOVE FILE MODAL ═══════════ -->
+<div class="modal-backdrop" id="moveBackdrop" onclick="closeMoveModal(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3>📁 Move File</h3>
+    <p class="modal-hint" id="moveHint"></p>
+    <div class="folder-picker" id="folderPicker"></div>
+    <div class="modal-actions">
+      <button class="editor-btn editor-btn-ghost" onclick="closeMoveModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ HISTORY MODAL ═══════════ -->
+<div class="modal-backdrop" id="historyBackdrop" onclick="closeHistory(event)">
+  <div class="modal-box modal-box-lg" onclick="event.stopPropagation()">
+    <h3>🕐 Version History</h3>
+    <p class="modal-hint">Recent auto-saved versions of the current project. Tap to restore.</p>
+    <div class="history-list" id="historyList"></div>
+    <div class="modal-actions">
+      <button class="editor-btn editor-btn-ghost" onclick="closeHistory()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ IMPORT CONFIRM MODAL ═══════════ -->
+<div class="modal-backdrop" id="importBackdrop" onclick="closeImportModal(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3>📤 Import Projects</h3>
+    <p class="modal-hint" id="importHint">Choose how to handle existing projects</p>
+    <div class="project-menu">
+      <button class="project-menu-btn" onclick="confirmImport('merge')">
+        ➕ Merge (keep existing + add imported)
+      </button>
+      <button class="project-menu-btn danger" onclick="confirmImport('replace')">
+        ⚠️ Replace (delete all existing + import)
+      </button>
+    </div>
+    <div class="modal-actions">
+      <button class="editor-btn editor-btn-ghost" onclick="closeImportModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden file input for import -->
+<input type="file" id="importFileInput" accept=".json,application/json" style="display:none;" />
+
 <!-- ═══════════ TOAST ═══════════ -->
 <div id="toast" class="toast">Message</div>
 
@@ -174,7 +263,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="assets/editor.js?v=14"></script>
+<script src="assets/editor.js?v=15"></script>
 
 </body>
 </html>
