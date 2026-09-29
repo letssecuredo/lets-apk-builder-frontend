@@ -30,13 +30,11 @@ document.addEventListener("DOMContentLoaded", () => {
       setTimeout(() => openTemplateModal(), 300);
     }
   } else {
-    // Auto-open index.html
     if (currentSite.files && currentSite.files["index.html"] !== undefined) {
       setTimeout(() => openFile("index.html"), 150);
     }
   }
 
-  // Warn on unsaved changes
   window.addEventListener("beforeunload", (e) => {
     if (openFiles.some(f => f.dirty)) {
       e.preventDefault();
@@ -44,7 +42,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Keyboard shortcuts
   document.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "s") {
       e.preventDefault();
@@ -425,24 +422,20 @@ function previewSite() {
     return;
   }
 
-  // Build a self-contained preview HTML with inline CSS/JS
   let html = indexHtml;
 
-  // Inline all CSS
   html = html.replace(/<link[^>]+href=["']([^"']+\.css)["'][^>]*>/gi, (match, path) => {
     const cleanPath = path.replace(/^\.\//, "");
     const css = currentSite.files[cleanPath];
     return css ? `<style>\n${css}\n</style>` : match;
   });
 
-  // Inline all JS
   html = html.replace(/<script[^>]+src=["']([^"']+\.js)["'][^>]*><\/script>/gi, (match, path) => {
     const cleanPath = path.replace(/^\.\//, "");
     const js = currentSite.files[cleanPath];
     return js ? `<script>\n${js}\n</script>` : match;
   });
 
-  // Open in new tab via blob
   const blob = new Blob([html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank");
@@ -737,6 +730,65 @@ function toast(msg) {
   }[type] || blank;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// DOWNLOAD SITE AS ZIP
+// ═══════════════════════════════════════════════════════════════
+async function downloadZip() {
+  if (!currentSite) {
+    showToast("No site to download");
+    return;
+  }
+
+  persistSite();
+
+  const files = currentSite.files || {};
+  const fileKeys = Object.keys(files).filter(p => !p.endsWith(".gitkeep"));
+
+  if (fileKeys.length === 0) {
+    showToast("⚠️ Site is empty — add some files first");
+    return;
+  }
+
+  if (!files["index.html"]) {
+    const proceed = confirm(
+      "⚠️ This site has no index.html file.\n\n" +
+      "Without index.html at root, the offline bundle won't work.\n\n" +
+      "Download anyway?"
+    );
+    if (!proceed) return;
+  }
+
+  try {
+    showToast("⏳ Building ZIP…");
+
+    const zip = new JSZip();
+    for (const path of fileKeys) {
+      zip.file(path, files[path] || "");
+    }
+
+    const blob = await zip.generateAsync({
+      type: "blob",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${currentSite.name || "site"}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    const sizeKB = Math.round(blob.size / 1024);
+    showToast(`✅ Downloaded: ${currentSite.name}.zip (${sizeKB} KB)`);
+  } catch (err) {
+    console.error("ZIP download failed:", err);
+    showToast("✗ Failed: " + err.message);
+  }
+}
+
 // ─── Toast ───
 let toastTimer = null;
 function showToast(message, duration = 2000) {
@@ -753,3 +805,15 @@ function escapeHtml(s) {
     "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&#39;",
   }[c] || c));
 }
+
+// ─── Expose globals for inline onclick ───
+window.downloadZip = downloadZip;
+window.previewSite = previewSite;
+window.saveSite = saveSite;
+window.createNewFile = createNewFile;
+window.createNewFolder = createNewFolder;
+window.openTemplateModal = openTemplateModal;
+window.closeTemplateModal = closeTemplateModal;
+window.closeModal = closeModal;
+window.confirmModal = confirmModal;
+window.loadTemplate = loadTemplate;
