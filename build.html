@@ -142,6 +142,26 @@
       </div>
     </div>
 
+    <!-- ═══════════ ADMIN: Custom Modules ═══════════ -->
+<div id="adminModuleSection" style="display:none;margin-top:20px;">
+  <label style="display:flex;align-items:center;gap:8px;">
+    <span>🔐 Custom modules</span>
+    <span class="admin-badge" style="font-size:10px;padding:2px 8px;">ADMIN</span>
+  </label>
+  <p style="font-size:11px;color:var(--muted);margin:0 0 8px;">
+    Upload custom Kotlin modules (ZIP). Must include <code>module.json</code>.
+  </p>
+  <div class="icon-drop" id="moduleDrop">
+    <input id="moduleFiles" type="file" accept=".zip,application/zip" multiple />
+    <p class="hint">
+      <strong>Tap to choose</strong> module ZIP(s)<br>
+      <span style="font-size:11px;">Max 5 MB each · Max 10 modules</span>
+    </p>
+  </div>
+  <ul id="moduleList" style="list-style:none;padding:0;margin:10px 0 0;font-size:12px;"></ul>
+  <p id="moduleError" class="icon-status err" style="display:none;"></p>
+</div>
+
     <!-- ═══════════ OFFLINE ZIP ═══════════ -->
     <div style="margin-top:20px;" id="zipField">
       <label>
@@ -437,6 +457,102 @@
   }
   function setStatus(msg, cls = "") { iconStatus.textContent = msg; iconStatus.className = "icon-status" + (cls ? " " + cls : ""); }
 
+
+  // ═══════════════════════════════════════════════════════════
+// ADMIN: CUSTOM MODULES
+// ═══════════════════════════════════════════════════════════
+const adminModuleSection = document.getElementById("adminModuleSection");
+const moduleFiles = document.getElementById("moduleFiles");
+const moduleDrop = document.getElementById("moduleDrop");
+const moduleList = document.getElementById("moduleList");
+const moduleError = document.getElementById("moduleError");
+
+const MAX_MODULE_BYTES = 5 * 1024 * 1024;
+const MAX_MODULES = 10;
+let uploadedModules = [];
+
+function updateModuleList() {
+  moduleList.innerHTML = uploadedModules.map((m, i) => `
+    <li style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">
+      <span>
+        ${m.isMain ? "⭐ " : ""}
+        <strong>${m.name}</strong>
+        <span style="color:var(--muted);"> · ${Math.round(m.size/1024)} KB</span>
+      </span>
+      <button type="button" onclick="removeModule(${i})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:16px;">✕</button>
+    </li>
+  `).join("");
+}
+
+window.removeModule = function(idx) {
+  uploadedModules.splice(idx, 1);
+  if (uploadedModules.length > 0 && !uploadedModules.some(m => m.isMain)) {
+    uploadedModules[0].isMain = true;
+  }
+  updateModuleList();
+};
+
+async function handleModuleFiles(files) {
+  moduleError.style.display = "none";
+
+  for (const file of Array.from(files)) {
+    if (uploadedModules.length >= MAX_MODULES) {
+      moduleError.textContent = `✗ Max ${MAX_MODULES} modules`;
+      moduleError.style.display = "block";
+      break;
+    }
+    if (file.size > MAX_MODULE_BYTES) {
+      moduleError.textContent = `✗ "${file.name}" too large (max 5 MB)`;
+      moduleError.style.display = "block";
+      continue;
+    }
+    if (!/\.zip$/i.test(file.name)) continue;
+
+    const b64 = await new Promise((resolve) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result).split(",")[1] || "");
+      r.readAsDataURL(file);
+    });
+
+    const id = file.name.replace(/\.zip$/i, "").replace(/[^a-z0-9-]/gi, "-").toLowerCase();
+    const isFirst = uploadedModules.length === 0;
+
+    uploadedModules.push({
+      id, name: file.name, base64: b64, size: file.size, isMain: isFirst,
+    });
+  }
+
+  updateModuleList();
+}
+
+if (moduleFiles) {
+  moduleFiles.addEventListener("change", () => handleModuleFiles(moduleFiles.files));
+  moduleDrop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    moduleDrop.classList.remove("dragover");
+    if (e.dataTransfer?.files) handleModuleFiles(e.dataTransfer.files);
+  });
+  ["dragenter","dragover"].forEach(ev => moduleDrop.addEventListener(ev, e => { e.preventDefault(); moduleDrop.classList.add("dragover"); }));
+  ["dragleave"].forEach(ev => moduleDrop.addEventListener(ev, e => { e.preventDefault(); moduleDrop.classList.remove("dragover"); }));
+}
+
+// Show admin section if logged in
+function updateAdminUI() {
+  if (adminAuth.isLoggedIn()) {
+    adminModuleSection.style.display = "block";
+  } else {
+    adminModuleSection.style.display = "none";
+  }
+}
+updateAdminUI();
+
+// Add modules to submit payload
+const _originalSubmit = form.onsubmit;
+form.addEventListener("submit", (e) => {
+  // No-op — payload gets updated in main listener
+}, { capture: true });
+
+  
   // ═══════════════════════════════════════════════════════════════
   // OFFLINE ZIP
   // ═══════════════════════════════════════════════════════════════
@@ -569,6 +685,18 @@
     errorEl.innerHTML = `<div class="error-box">${msg}</div>`;
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  // Payload এর মধ্যে এই line যোগ করো:
+const payload = {
+  // ... existing fields ...
+  modules: uploadedModules.map(m => ({
+    id: m.id,
+    name: m.name,
+    base64: m.base64,
+    isMain: m.isMain,
+  })),
+};
+  
 </script>
 </body>
 </html>
