@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<title>Code Editor — Let-S APK Builder</title>
+
+<!-- CodeMirror CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
+<link rel="stylesheet" href="assets/style.css?v=11" />
+<link rel="stylesheet" href="assets/editor.css?v=11" />
+</head>
+<body class="editor-body">
+
+<!-- ═══════════ TOP BAR ═══════════ -->
+<header class="editor-topbar">
+  <div class="editor-topbar-left">
+    <a href="build.html" class="editor-back-btn" title="Back to Build">←</a>
+    <div class="editor-module-name" id="moduleNameLabel">untitled-module</div>
+  </div>
+  <div class="editor-topbar-right">
+    <button class="editor-btn editor-btn-ghost" onclick="renameModule()" title="Rename module">
+      ✏️ Rename
+    </button>
+    <button class="editor-btn editor-btn-primary" onclick="saveModule()">
+      💾 Save
+    </button>
+  </div>
+</header>
+
+<!-- ═══════════ MAIN LAYOUT ═══════════ -->
+<div class="editor-layout">
+
+  <!-- Sidebar -->
+  <aside class="editor-sidebar" id="editorSidebar">
+    <div class="editor-sidebar-header">
+      <span>FILES</span>
+      <div class="editor-sidebar-actions">
+        <button onclick="createNewFile()" title="New file">📄+</button>
+        <button onclick="createNewFolder()" title="New folder">📁+</button>
+      </div>
+    </div>
+    <div class="editor-file-tree" id="fileTree">
+      <!-- Dynamically populated -->
+    </div>
+  </aside>
+
+  <!-- Editor area -->
+  <main class="editor-main">
+    <div class="editor-tabs" id="editorTabs"></div>
+    <div class="editor-container">
+      <textarea id="codeArea"></textarea>
+      <div class="editor-empty" id="editorEmpty">
+        <div class="editor-empty-icon">📝</div>
+        <div class="editor-empty-title">No file open</div>
+        <div class="editor-empty-desc">
+          Select a file from the sidebar or create a new one
+        </div>
+        <button class="editor-btn editor-btn-primary" onclick="createNewFile()">
+          📄 Create First File
+        </button>
+      </div>
+    </div>
+    <div class="editor-statusbar">
+      <span id="filePathLabel">—</span>
+      <span id="cursorPos">Ln 1, Col 1</span>
+    </div>
+  </main>
+</div>
+
+<!-- ═══════════ MODALS ═══════════ -->
+
+<!-- New file/folder modal -->
+<div class="modal-backdrop" id="modalBackdrop" onclick="closeModal(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3 id="modalTitle">New File</h3>
+    <input type="text" id="modalInput" placeholder="filename.kt" autocomplete="off" />
+    <p class="modal-hint" id="modalHint"></p>
+    <div class="modal-actions">
+      <button class="editor-btn editor-btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="editor-btn editor-btn-primary" onclick="confirmModal()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Template picker modal -->
+<div class="modal-backdrop" id="templateBackdrop" onclick="closeTemplateModal(event)">
+  <div class="modal-box modal-box-lg" onclick="event.stopPropagation()">
+    <h3>📦 Start from Template</h3>
+    <p class="modal-hint">Pre-built files to get you started</p>
+    <div class="template-grid">
+      <div class="template-card" onclick="loadTemplate('blank')">
+        <div class="template-icon">📄</div>
+        <div class="template-name">Blank Module</div>
+        <div class="template-desc">module.json only</div>
+      </div>
+      <div class="template-card" onclick="loadTemplate('helper')">
+        <div class="template-icon">🔧</div>
+        <div class="template-name">Helper Module</div>
+        <div class="template-desc">Kotlin helper + module.json</div>
+      </div>
+      <div class="template-card" onclick="loadTemplate('activity')">
+        <div class="template-icon">📱</div>
+        <div class="template-name">Activity Module</div>
+        <div class="template-desc">Kotlin activity + layout + manifest</div>
+      </div>
+      <div class="template-card" onclick="loadTemplate('full')">
+        <div class="template-icon">🚀</div>
+        <div class="template-name">Full Module</div>
+        <div class="template-desc">Everything + deps + drawable</div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="editor-btn editor-btn-ghost" onclick="closeTemplateModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast">Message</div>
+
+<!-- ═══════════ SCRIPTS ═══════════ -->
+<!-- CodeMirror -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/clike/clike.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/groovy/groovy.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
+
+<!-- JSZip -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<!-- Editor logic -->
+<script src="assets/editor.js?v=11"></script>
+
+</body>
+</html>
