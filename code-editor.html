@@ -6,10 +6,9 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <title>Code Editor — Let-S APK Builder</title>
 
-<!-- CodeMirror CSS -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
-<link rel="stylesheet" href="assets/editor.css?v=12" />
+<link rel="stylesheet" href="assets/editor.css?v=14" />
 </head>
 <body class="editor-body">
 
@@ -17,18 +16,12 @@
 <header class="editor-topbar">
   <div class="editor-topbar-left">
     <a href="build.html" class="editor-back-btn" title="Back to Build">←</a>
-    <div class="editor-module-name" id="moduleNameLabel">untitled-module</div>
+    <div class="editor-module-name" id="moduleNameLabel">untitled-project</div>
   </div>
   <div class="editor-topbar-right">
-    <button class="editor-btn editor-btn-ghost" onclick="renameModule()" title="Rename module">
-      ✏️ Rename
-    </button>
-    <button class="editor-btn editor-btn-ghost" onclick="downloadZip()" title="Download as ZIP">
-      ⬇️ ZIP
-    </button>
-    <button class="editor-btn editor-btn-primary" onclick="saveModule()">
-      💾 Save
-    </button>
+    <button class="editor-btn editor-btn-ghost" onclick="renameProject()" title="Rename project">✏️</button>
+    <button class="editor-btn editor-btn-ghost" onclick="downloadZip()" title="Download ZIP">⬇️ ZIP</button>
+    <button class="editor-btn editor-btn-primary" onclick="saveProject()">💾 Save</button>
   </div>
 </header>
 
@@ -37,14 +30,40 @@
 
   <!-- Sidebar -->
   <aside class="editor-sidebar" id="editorSidebar">
-    <div class="editor-sidebar-header">
-      <span>FILES</span>
-      <div class="editor-sidebar-actions">
-        <button onclick="createNewFile()" title="New file">📄+</button>
-        <button onclick="createNewFolder()" title="New folder">📁+</button>
+
+    <!-- PROJECTS SECTION -->
+    <div class="sidebar-section sidebar-section-projects">
+      <div class="sidebar-section-header">
+        <span>📁 PROJECTS</span>
+        <div class="sidebar-section-actions">
+          <button onclick="createNewProject()" title="New project">＋</button>
+        </div>
       </div>
+      <div class="project-search">
+        <input type="text" id="projectSearch" placeholder="Search projects…" oninput="filterProjects()" />
+      </div>
+      <div class="project-list" id="projectList"></div>
     </div>
-    <div class="editor-file-tree" id="fileTree"></div>
+
+    <!-- FILES SECTION -->
+    <div class="sidebar-section sidebar-section-files">
+      <div class="sidebar-section-header">
+        <span>📄 FILES</span>
+        <div class="sidebar-section-actions">
+          <button onclick="createNewFile()" title="New file">📄+</button>
+          <button onclick="createNewFolder()" title="New folder">📁+</button>
+        </div>
+      </div>
+
+      <!-- Breadcrumb for folder context -->
+      <div class="folder-breadcrumb" id="folderBreadcrumb" style="display:none;">
+        <button class="crumb-btn" onclick="goToRoot()">🏠 Root</button>
+        <span id="breadcrumbPath"></span>
+      </div>
+
+      <div class="editor-file-tree" id="fileTree"></div>
+    </div>
+
   </aside>
 
   <!-- Editor area -->
@@ -55,12 +74,8 @@
       <div class="editor-empty" id="editorEmpty">
         <div class="editor-empty-icon">📝</div>
         <div class="editor-empty-title">No file open</div>
-        <div class="editor-empty-desc">
-          Select a file from the sidebar or create a new one
-        </div>
-        <button class="editor-btn editor-btn-primary" onclick="createNewFile()">
-          📄 Create First File
-        </button>
+        <div class="editor-empty-desc">Select a file from the sidebar or create a new one</div>
+        <button class="editor-btn editor-btn-primary" onclick="createNewFile()">📄 Create First File</button>
       </div>
     </div>
     <div class="editor-statusbar">
@@ -83,35 +98,66 @@
   </div>
 </div>
 
-<!-- ═══════════ TEMPLATE PICKER MODAL ═══════════ -->
-<div class="modal-backdrop" id="templateBackdrop" onclick="closeTemplateModal(event)">
+<!-- ═══════════ RENAME MODAL ═══════════ -->
+<div class="modal-backdrop" id="renameBackdrop" onclick="closeRenameModal(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3 id="renameTitle">Rename</h3>
+    <p class="modal-hint" id="renameHint"></p>
+    <input type="text" id="renameInput" autocomplete="off" />
+    <div class="modal-actions">
+      <button class="editor-btn editor-btn-ghost" onclick="closeRenameModal()">Cancel</button>
+      <button class="editor-btn editor-btn-primary" onclick="confirmRename()">Rename</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ NEW PROJECT MODAL ═══════════ -->
+<div class="modal-backdrop" id="newProjectBackdrop" onclick="closeNewProjectModal(event)">
   <div class="modal-box modal-box-lg" onclick="event.stopPropagation()">
-    <h3>📦 Start from Template</h3>
-    <p class="modal-hint">Pre-built files to get you started</p>
+    <h3>➕ New Project</h3>
+    <p class="modal-hint">Give it a name and choose a starting template</p>
+    <input type="text" id="newProjectName" placeholder="my-project" autocomplete="off" style="margin-bottom:16px;" />
     <div class="template-grid">
-      <div class="template-card" onclick="loadTemplate('blank')">
+      <div class="template-card active" data-template="blank" onclick="selectTemplate(this, 'blank')">
         <div class="template-icon">📄</div>
-        <div class="template-name">Blank Module</div>
+        <div class="template-name">Blank</div>
         <div class="template-desc">module.json only</div>
       </div>
-      <div class="template-card" onclick="loadTemplate('helper')">
+      <div class="template-card" data-template="helper" onclick="selectTemplate(this, 'helper')">
         <div class="template-icon">🔧</div>
-        <div class="template-name">Helper Module</div>
+        <div class="template-name">Helper</div>
         <div class="template-desc">Kotlin helper + module.json</div>
       </div>
-      <div class="template-card" onclick="loadTemplate('activity')">
+      <div class="template-card" data-template="activity" onclick="selectTemplate(this, 'activity')">
         <div class="template-icon">📱</div>
-        <div class="template-name">Activity Module</div>
-        <div class="template-desc">Kotlin activity + layout + manifest</div>
+        <div class="template-name">Activity</div>
+        <div class="template-desc">Activity + layout + manifest</div>
       </div>
-      <div class="template-card" onclick="loadTemplate('full')">
+      <div class="template-card" data-template="full" onclick="selectTemplate(this, 'full')">
         <div class="template-icon">🚀</div>
-        <div class="template-name">Full Module</div>
-        <div class="template-desc">Everything + deps + drawable</div>
+        <div class="template-name">Full</div>
+        <div class="template-desc">Everything + drawable + readme</div>
       </div>
     </div>
     <div class="modal-actions">
-      <button class="editor-btn editor-btn-ghost" onclick="closeTemplateModal()">Close</button>
+      <button class="editor-btn editor-btn-ghost" onclick="closeNewProjectModal()">Cancel</button>
+      <button class="editor-btn editor-btn-primary" onclick="confirmNewProject()">Create Project</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ PROJECT MENU MODAL ═══════════ -->
+<div class="modal-backdrop" id="projectMenuBackdrop" onclick="closeProjectMenu(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <h3 id="projectMenuTitle">Project Actions</h3>
+    <div class="project-menu">
+      <button class="project-menu-btn" onclick="menuRename()">✏️ Rename</button>
+      <button class="project-menu-btn" onclick="menuDuplicate()">📋 Duplicate</button>
+      <button class="project-menu-btn" onclick="menuDownload()">⬇️ Download ZIP</button>
+      <button class="project-menu-btn danger" onclick="menuDelete()">🗑️ Delete</button>
+    </div>
+    <div class="modal-actions">
+      <button class="editor-btn editor-btn-ghost" onclick="closeProjectMenu()">Close</button>
     </div>
   </div>
 </div>
@@ -120,8 +166,6 @@
 <div id="toast" class="toast">Message</div>
 
 <!-- ═══════════ SCRIPTS ═══════════ -->
-
-<!-- CodeMirror core + modes -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
@@ -129,12 +173,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/groovy/groovy.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
-
-<!-- JSZip for building ZIP in the browser -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-
-<!-- Editor logic -->
-<script src="assets/editor.js?v=12"></script>
+<script src="assets/editor.js?v=14"></script>
 
 </body>
 </html>
