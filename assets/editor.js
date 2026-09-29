@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   Code Editor — 7 Features
+   Code Editor — 7 Features + File Click Fix
    1. Import/Export JSON
    2. Version History
    3. File Search
@@ -85,10 +85,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   setInterval(() => {
     if (currentProject) takeSnapshot("Auto-save");
-  }, 300000); // 5 min
+  }, 300000);
 
   // Import file input handler
-  document.getElementById("importFileInput").addEventListener("change", handleImportFile);
+  const importInput = document.getElementById("importFileInput");
+  if (importInput) importInput.addEventListener("change", handleImportFile);
 });
 
 /* ═══════════════════════════════════════════════════════════════
@@ -141,7 +142,7 @@ function loadHistory() {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
     historyCache = raw ? JSON.parse(raw) : {};
-    if (typeof historyCache !== "object") historyCache = {};
+    if (typeof historyCache !== "object" || historyCache === null) historyCache = {};
   } catch { historyCache = {}; }
 }
 
@@ -149,7 +150,6 @@ function saveHistory() {
   try {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(historyCache));
   } catch (e) {
-    // Trim oldest if storage full
     for (const pid of Object.keys(historyCache)) {
       if (historyCache[pid].length > 5) historyCache[pid] = historyCache[pid].slice(-5);
     }
@@ -164,7 +164,6 @@ function takeSnapshot(note = "Auto-save", pid = null) {
   const project = allProjects.find(p => p.id === projectId);
   if (!project) return;
 
-  // Persist open files first
   if (currentProject && currentProject.id === projectId) {
     for (const file of openFiles) {
       currentProject.files[file.path] = file.content;
@@ -180,7 +179,6 @@ function takeSnapshot(note = "Auto-save", pid = null) {
   if (!historyCache[projectId]) historyCache[projectId] = [];
   historyCache[projectId].push(snapshot);
 
-  // Keep only last MAX_HISTORY
   if (historyCache[projectId].length > MAX_HISTORY) {
     historyCache[projectId] = historyCache[projectId].slice(-MAX_HISTORY);
   }
@@ -197,7 +195,6 @@ function showHistory() {
   if (history.length === 0) {
     list.innerHTML = `<div class="history-empty">No versions yet.<br>Save or edit to create snapshots.</div>`;
   } else {
-    // Show newest first
     list.innerHTML = [...history].reverse().map((snap, idx) => {
       const realIdx = history.length - 1 - idx;
       const fileCount = Object.keys(snap.files || {}).filter(k => !k.endsWith(".gitkeep")).length;
@@ -229,15 +226,12 @@ function restoreHistory(idx) {
 
   if (!confirm(`Restore version from ${relativeTime(snap.ts)}?\n\nCurrent changes will be saved as a new version first.`)) return;
 
-  // Snapshot current state first
   takeSnapshot("Before restore");
 
-  // Apply snapshot
   currentProject.files = JSON.parse(JSON.stringify(snap.files));
   currentProject.updatedAt = Date.now();
   saveAllProjects();
 
-  // Close tabs and re-open module.json
   openFiles = [];
   activeFile = null;
   activeFolder = "";
@@ -292,8 +286,10 @@ function exportAllProjects() {
 }
 
 function importAllProjects() {
-  document.getElementById("importFileInput").value = "";
-  document.getElementById("importFileInput").click();
+  const input = document.getElementById("importFileInput");
+  if (!input) return;
+  input.value = "";
+  input.click();
 }
 
 function handleImportFile(e) {
@@ -314,7 +310,6 @@ function handleImportFile(e) {
         return;
       }
 
-      // Store data temporarily
       window.__pendingImport = data.projects;
       document.getElementById("importHint").textContent =
         `Found ${data.projects.length} projects. How to import?`;
@@ -342,13 +337,11 @@ function confirmImport(mode) {
     if (!confirm("⚠️ This will DELETE all existing projects. Continue?")) return;
     allProjects = imported;
   } else {
-    // Merge - skip duplicates by id
     const existingIds = new Set(allProjects.map(p => p.id));
     let added = 0;
     for (const proj of imported) {
       if (!proj || !proj.id || !proj.name || !proj.files) continue;
       if (existingIds.has(proj.id)) {
-        // Rename to avoid conflict
         proj.id = proj.id + "-imported-" + Date.now() + Math.floor(Math.random() * 1000);
         proj.name = proj.name + "-imported";
       }
@@ -361,7 +354,6 @@ function confirmImport(mode) {
   saveAllProjects();
   closeImportModal();
 
-  // Reload current project if it was replaced
   if (!allProjects.find(p => p.id === (currentProject && currentProject.id))) {
     currentProject = allProjects[0] || null;
     if (currentProject) {
@@ -396,7 +388,6 @@ function duplicateFile(path) {
   const content = currentProject.files[path];
   if (content === undefined) return;
 
-  // Generate new name
   const parts = path.split("/");
   const fileName = parts.pop();
   const folder = parts.join("/");
@@ -409,9 +400,7 @@ function duplicateFile(path) {
   do {
     newName = `${baseName}-copy${counter === 2 ? "" : counter}${ext}`;
     counter++;
-  } while (
-    currentProject.files[folder ? folder + "/" + newName : newName] !== undefined
-  );
+  } while (currentProject.files[folder ? folder + "/" + newName : newName] !== undefined);
 
   const newPath = folder ? folder + "/" + newName : newName;
 
@@ -428,14 +417,13 @@ function duplicateFile(path) {
 function updateDirtyIndicator() {
   const hasDirty = openFiles.some(f => f.dirty);
   const indicator = document.getElementById("globalDirtyIndicator");
-  indicator.style.display = hasDirty ? "inline" : "none";
-
-  // Update tab dots
+  if (indicator) indicator.style.display = hasDirty ? "inline" : "none";
   renderTabs();
 }
 
 function showSaveStatus(text) {
   const el = document.getElementById("saveStatus");
+  if (!el) return;
   el.textContent = text;
   el.classList.remove("hidden");
   if (saveStatusTimer) clearTimeout(saveStatusTimer);
@@ -451,17 +439,13 @@ function showMoveModal(path) {
 
   moveTarget = path;
 
-  // Build list of folders
   const folders = new Set();
-  folders.add(""); // root
+  folders.add("");
   for (const filePath of Object.keys(currentProject.files)) {
     const parts = filePath.split("/");
-    if (parts.length > 1) {
-      folders.add(parts[0]);
-    }
+    if (parts.length > 1) folders.add(parts[0]);
   }
 
-  // Current folder of file
   const fileParts = path.split("/");
   const currentFolder = fileParts.length > 1 ? fileParts.slice(0, -1).join("/") : "";
   const fileName = fileParts[fileParts.length - 1];
@@ -510,12 +494,10 @@ function moveFileTo(newFolder) {
     return;
   }
 
-  // Move
   currentProject.files[newPath] = currentProject.files[path];
   delete currentProject.files[path];
   currentProject.updatedAt = Date.now();
 
-  // Update open tabs
   for (const f of openFiles) {
     if (f.path === path) f.path = newPath;
   }
@@ -574,17 +556,10 @@ function formatXml(xml) {
   for (let line of lines) {
     line = line.trim();
     if (!line) continue;
-
-    // Decrease indent for closing tags
     if (/^<\//.test(line)) indent = Math.max(0, indent - 1);
-
     result.push("  ".repeat(indent) + line);
-
-    // Increase indent for opening tags (not self-closing, not comment, not declaration)
     if (/^<[^!?][^>]*[^\/]>$/.test(line) && !/<\/.*>$/.test(line)) {
       indent++;
-    } else if (/^<[^!?][^>]*[^\/]>\s*<[^\/]/.test(line)) {
-      // Handles `<a><b>text</b></a>` on same line - keep simple
     }
   }
 
@@ -601,12 +576,10 @@ function formatCurlies(code) {
     let trimmed = line.trim();
     if (!trimmed) { result.push(""); continue; }
 
-    // If line starts with closing brace, decrease indent
     if (/^[})]/.test(trimmed)) indent = Math.max(0, indent - 1);
 
     result.push(INDENT.repeat(indent) + trimmed);
 
-    // Count braces/parens to adjust indent
     let opens = 0;
     let closes = 0;
     for (const ch of trimmed) {
@@ -674,7 +647,8 @@ function confirmNewProject() {
   activeFile = null;
   activeFolder = "";
   fileSearchQuery = "";
-  document.getElementById("fileSearch").value = "";
+  const fs = document.getElementById("fileSearch");
+  if (fs) fs.value = "";
 
   renderProjectList();
   renderFileTree();
@@ -704,7 +678,8 @@ function switchProject(id) {
   activeFile = null;
   activeFolder = "";
   fileSearchQuery = "";
-  document.getElementById("fileSearch").value = "";
+  const fs = document.getElementById("fileSearch");
+  if (fs) fs.value = "";
 
   renderProjectList();
   renderFileTree();
@@ -930,7 +905,7 @@ function filterProjects() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   RENDER — FILE TREE
+   RENDER — FILE TREE (with CLICK FIX)
    ═══════════════════════════════════════════════════════════════ */
 function renderFileTree() {
   const tree = document.getElementById("fileTree");
@@ -939,7 +914,6 @@ function renderFileTree() {
 
   let files = Object.keys(currentProject.files || {}).sort();
 
-  // Apply search filter
   if (fileSearchQuery) {
     files = files.filter(path => path.toLowerCase().includes(fileSearchQuery));
     if (files.length === 0) {
@@ -948,7 +922,6 @@ function renderFileTree() {
     }
   }
 
-  // Group by folder
   const folders = {};
   const rootFiles = [];
   for (const path of files) {
@@ -964,10 +937,12 @@ function renderFileTree() {
   const folderNames = Object.keys(folders).sort();
   let html = "";
 
+  // Root files
   for (const path of rootFiles) {
     html += renderFileItem(path, 0);
   }
 
+  // Folders + their files
   for (const folder of folderNames) {
     const isActive = activeFolder === folder;
     const folderFiles = folders[folder].sort();
@@ -992,6 +967,17 @@ function renderFileTree() {
 
   tree.innerHTML = html;
   updateBreadcrumb();
+
+  // ⭐ CRITICAL FIX: Attach click listeners to file items
+  tree.querySelectorAll(".file-item").forEach(el => {
+    el.addEventListener("click", (e) => {
+      // Ignore if clicked on action button
+      if (e.target.closest(".file-action")) return;
+      e.stopPropagation();
+      const path = el.dataset.path;
+      if (path) openFile(path);
+    });
+  });
 }
 
 function renderFileItem(path, depth = 0) {
@@ -1077,6 +1063,7 @@ function updateProjectLabel() {
    ═══════════════════════════════════════════════════════════════ */
 function initCodeMirror() {
   const textarea = document.getElementById("codeArea");
+  if (!textarea) return;
   cmEditor = CodeMirror.fromTextArea(textarea, {
     lineNumbers: true,
     theme: "material-darker",
@@ -1121,6 +1108,10 @@ function setEditorMode(path) {
    ═══════════════════════════════════════════════════════════════ */
 function openFile(path) {
   if (!currentProject) return;
+  if (currentProject.files[path] === undefined) {
+    console.warn("File not found:", path);
+    return;
+  }
   let file = openFiles.find(f => f.path === path);
   if (!file) {
     file = { path, content: currentProject.files[path] || "", dirty: false };
@@ -1162,11 +1153,10 @@ function closeTab(path) {
 function createNewFile() {
   if (!currentProject) { createNewProject(); return; }
   modalMode = "file";
-  let placeholder = "filename.kt";
   let hint = activeFolder
     ? `📂 Creating inside "${activeFolder}/" — just type the filename`
     : "Use / for subfolders (e.g. layout/main.xml) or tap a folder first";
-  showModal("New File", placeholder, hint);
+  showModal("New File", "filename.kt", hint);
 }
 
 function createNewFolder() {
@@ -1574,6 +1564,7 @@ function getFileIcon(path) {
 let toastTimer = null;
 function showToast(message, duration = 2000) {
   const toast = document.getElementById("toast");
+  if (!toast) return;
   toast.textContent = message;
   toast.classList.add("show");
   if (toastTimer) clearTimeout(toastTimer);
@@ -1610,8 +1601,6 @@ window.closeRenameModal = closeRenameModal;
 window.confirmRename = confirmRename;
 window.enterFolder = enterFolder;
 window.goToRoot = goToRoot;
-
-// New features
 window.formatCode = formatCode;
 window.showHistory = showHistory;
 window.closeHistory = closeHistory;
@@ -1640,3 +1629,9 @@ window.closeMoveModal = closeMoveModal;
 window.moveFileTo = moveFileTo;
 window.filterFiles = filterFiles;
 window.duplicateFile = duplicateFile;
+
+// Core file operations (fix)
+window.openFile = openFile;
+window.closeTab = closeTab;
+window.deleteFile = deleteFile;
+window.persistCurrentProject = persistCurrentProject;
