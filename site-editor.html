@@ -13,10 +13,9 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css" />
 
 <!-- Site Editor CSS -->
-<link rel="stylesheet" href="assets/site-editor.css?v=11" />
+<link rel="stylesheet" href="assets/site-editor.css?v=12" />
 
 <style>
-  /* Small overrides specific to this page */
   .preview-btn {
     background: linear-gradient(135deg, #3ecf8e, #2fb578);
     color: #fff;
@@ -37,6 +36,9 @@
     <div class="editor-module-name" id="moduleNameLabel">my-site</div>
   </div>
   <div class="editor-topbar-right">
+    <button class="editor-btn editor-btn-ghost" onclick="downloadZip()" title="Download as ZIP">
+      ⬇️ ZIP
+    </button>
     <button class="editor-btn preview-btn" onclick="previewSite()" title="Preview in new tab">
       👁️ Preview
     </button>
@@ -144,11 +146,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closebrackets.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/matchbrackets.min.js"></script>
 
-<!-- JSZip for building the final ZIP in the browser -->
+<!-- JSZip for building ZIP in the browser -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <!-- Site editor logic -->
-<script src="assets/site-editor.js?v=11"></script>
+<script src="assets/site-editor.js?v=12"></script>
 
 </body>
 </html>
