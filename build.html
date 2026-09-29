@@ -8,7 +8,7 @@
 <meta http-equiv="Expires" content="0" />
 <title>Build an APK — Let-S APK Builder</title>
 
-<!-- JSZip for in-browser module ZIP creation -->
+<!-- JSZip for in-browser ZIP creation -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
 <link rel="stylesheet" href="assets/style.css?v=11" />
@@ -97,7 +97,7 @@
     font-size:16px; padding:2px 6px;
   }
 
-  /* Saved code-editor modules */
+  /* Saved items (module / site) */
   .saved-mod-item {
     display:flex; align-items:center; gap:10px;
     padding:10px 12px; background:var(--bg-2);
@@ -108,7 +108,8 @@
   .saved-mod-item.checked {
     border-color:var(--accent); background:rgba(31,111,235,.08);
   }
-  .saved-mod-item input[type="checkbox"] {
+  .saved-mod-item input[type="checkbox"],
+  .saved-mod-item input[type="radio"] {
     width:16px; height:16px; flex-shrink:0;
   }
   .saved-mod-info { flex:1; min-width:0; }
@@ -133,6 +134,14 @@
   .field-hidden { display:none !important; }
   .req-badge { font-size:10px; color:var(--danger); margin-left:6px; font-weight:600; }
   .opt-badge { font-size:10px; color:var(--muted); margin-left:6px; font-weight:500; }
+
+  /* Zip uploaded info */
+  .zip-uploaded-info {
+    display:flex; justify-content:space-between; align-items:center;
+    padding:10px 12px; background:var(--bg-2);
+    border:1px solid var(--border); border-radius:10px;
+    font-size:13px; margin-bottom:10px;
+  }
 </style>
 </head>
 <body>
@@ -232,7 +241,6 @@
         Write code in browser or upload a ZIP. Max 5 MB per module.
       </p>
 
-      <!-- Two action buttons -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
         <button type="button" class="write-code-btn" onclick="openCodeEditor()">
           ✏️ Write Code
@@ -242,30 +250,41 @@
         </button>
       </div>
 
-      <!-- Hidden ZIP upload input -->
       <input id="moduleFiles" type="file" accept=".zip,application/zip" multiple style="display:none;" />
 
-      <!-- Uploaded ZIP list -->
       <ul id="moduleList" style="list-style:none;padding:0;margin:0;"></ul>
 
-      <!-- Saved code-editor modules list -->
       <div id="savedCodeModules"></div>
 
       <p id="moduleError" class="icon-status err" style="display:none;"></p>
     </div>
 
-    <!-- ═══════════ OFFLINE ZIP ═══════════ -->
+    <!-- ═══════════ OFFLINE BUNDLE ═══════════ -->
     <div style="margin-top:22px;" id="zipField">
-      <label>Offline bundle (ZIP)<span id="zipBadge" class="opt-badge">optional</span></label>
-      <div class="icon-drop" id="zipDrop">
-        <input id="offlineZip" type="file" accept=".zip,application/zip" />
-        <p class="hint">
-          <strong>Tap to choose</strong> a ZIP of your static site<br>
-          <span style="font-size:11px;">Max 3 MB · index.html must be at ZIP root</span>
-        </p>
+      <label>Offline bundle<span id="zipBadge" class="opt-badge">optional</span></label>
+      <p style="font-size:11px;color:var(--muted);margin:8px 0 12px;">
+        Write HTML/CSS/JS in browser or upload a ZIP.
+      </p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <button type="button" class="write-code-btn" onclick="openSiteEditor()">
+          ✏️ Write Code
+        </button>
+        <button type="button" class="btn secondary" onclick="document.getElementById('offlineZip').click()" style="margin:0;">
+          📁 Upload ZIP
+        </button>
       </div>
-      <p id="zipStatus" class="icon-status"></p>
-      <div id="zipInfo" style="display:none;margin-top:8px;font-size:12px;color:var(--success);text-align:center;"></div>
+
+      <input id="offlineZip" type="file" accept=".zip,application/zip" style="display:none;" />
+
+      <!-- Uploaded ZIP info -->
+      <div id="zipUploadedInfo" class="zip-uploaded-info" style="display:none;">
+        <span>📁 <strong id="zipUploadedName">—</strong></span>
+        <button type="button" onclick="clearZipUpload()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:14px;">✕</button>
+      </div>
+
+      <!-- Saved site drafts from editor -->
+      <div id="savedSites"></div>
     </div>
 
     <!-- ═══════════ ORIENTATION ═══════════ -->
@@ -331,9 +350,7 @@
       urlBadge.className = "req-badge";
       websiteUrlInput.setAttribute("required", "");
       zipField.classList.add("field-hidden");
-      zipInput.value = "";
-      offlineZipBase64 = null; offlineZipName = null;
-      zipStatus.textContent = ""; zipInfo.style.display = "none";
+      clearZipUpload();
     } else {
       urlField.classList.remove("field-hidden");
       urlBadge.textContent = "required";
@@ -535,61 +552,61 @@
   function setStatus(msg, cls = "") { iconStatus.textContent = msg; iconStatus.className = "icon-status" + (cls ? " " + cls : ""); }
 
   // ═══════════════════════════════════════════════════════════
-  // OFFLINE ZIP
+  // OFFLINE ZIP UPLOAD
   // ═══════════════════════════════════════════════════════════
   const zipInput = document.getElementById("offlineZip");
-  const zipDrop = document.getElementById("zipDrop");
-  const zipStatus = document.getElementById("zipStatus");
-  const zipInfo = document.getElementById("zipInfo");
+  const zipUploadedInfo = document.getElementById("zipUploadedInfo");
+  const zipUploadedName = document.getElementById("zipUploadedName");
   let offlineZipBase64 = null;
   let offlineZipName = null;
+  let offlineZipSize = 0;
   const ZIP_MAX_BYTES = 3 * 1024 * 1024;
-
-  ["dragenter","dragover"].forEach(ev => zipDrop.addEventListener(ev, e => { e.preventDefault(); zipDrop.classList.add("dragover"); }));
-  ["dragleave","drop"].forEach(ev => zipDrop.addEventListener(ev, e => { e.preventDefault(); zipDrop.classList.remove("dragover"); }));
-  zipDrop.addEventListener("drop", e => {
-    const file = e.dataTransfer?.files?.[0];
-    if (file) { const dt = new DataTransfer(); dt.items.add(file); zipInput.files = dt.files; zipInput.dispatchEvent(new Event("change", { bubbles: true })); }
-  });
 
   zipInput.addEventListener("change", async () => {
     const file = zipInput.files?.[0];
-    if (!file) {
-      offlineZipBase64 = null; offlineZipName = null;
-      zipStatus.textContent = ""; zipInfo.style.display = "none";
-      return;
-    }
+    if (!file) { clearZipUpload(); return; }
     if (file.size > ZIP_MAX_BYTES) {
-      zipStatus.textContent = `✗ ZIP too large (${Math.round(file.size/1024/1024*10)/10} MB, max 3 MB)`;
-      zipStatus.className = "icon-status err";
-      zipInput.value = ""; offlineZipBase64 = null; offlineZipName = null;
+      showToast(`✗ ZIP too large (max 3 MB)`);
+      zipInput.value = "";
+      clearZipUpload();
       return;
     }
     if (!/\.zip$/i.test(file.name)) {
-      zipStatus.textContent = "✗ Only .zip files accepted";
-      zipStatus.className = "icon-status err";
+      showToast("✗ Only .zip files accepted");
       zipInput.value = "";
       return;
     }
-    zipStatus.textContent = "⏳ Reading…";
-    zipStatus.className = "icon-status";
     try {
       const reader = new FileReader();
       reader.onload = () => {
         offlineZipBase64 = String(reader.result).split(",")[1] || "";
         offlineZipName = file.name;
-        zipStatus.textContent = `✓ ${file.name} (${Math.round(file.size/1024)} KB)`;
-        zipStatus.className = "icon-status ok";
-        zipInfo.style.display = "block";
-        zipInfo.textContent = "Offline bundle ready — index.html must be at ZIP root.";
+        offlineZipSize = file.size;
+        zipUploadedInfo.style.display = "flex";
+        zipUploadedName.textContent = `${file.name} (${Math.round(file.size/1024)} KB)`;
+
+        // Deselect site draft (mutually exclusive)
+        if (selectedSiteId) {
+          selectedSiteId = null;
+          localStorage.removeItem("builder_site_selected");
+          renderSavedSites();
+        }
+
+        showToast("✅ ZIP loaded");
       };
-      reader.onerror = () => { zipStatus.textContent = "✗ Read failed"; zipStatus.className = "icon-status err"; };
       reader.readAsDataURL(file);
     } catch (err) {
-      zipStatus.textContent = "✗ " + err.message;
-      zipStatus.className = "icon-status err";
+      showToast("✗ " + err.message);
     }
   });
+
+  window.clearZipUpload = function() {
+    offlineZipBase64 = null;
+    offlineZipName = null;
+    offlineZipSize = 0;
+    zipInput.value = "";
+    zipUploadedInfo.style.display = "none";
+  };
 
   // ═══════════════════════════════════════════════════════════
   // COMMON MODULES
@@ -633,7 +650,7 @@
   loadCommonModules();
 
   // ═══════════════════════════════════════════════════════════
-  // ADMIN: ZIP UPLOADED MODULES
+  // ADMIN: CUSTOM MODULES (ZIP + Code Editor)
   // ═══════════════════════════════════════════════════════════
   const adminModuleSection = document.getElementById("adminModuleSection");
   const moduleFiles = document.getElementById("moduleFiles");
@@ -698,9 +715,12 @@
     moduleFiles.addEventListener("change", () => handleModuleFiles(moduleFiles.files));
   }
 
-  // Show admin section if logged in
   if (adminAuth.isLoggedIn()) {
     adminModuleSection.style.display = "block";
+  }
+
+  function openCodeEditor() {
+    window.open("code-editor.html", "_blank");
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -711,10 +731,6 @@
   let codeEditorModules = [];
   let selectedCodeModuleIds = [];
 
-  function openCodeEditor() {
-    window.open("code-editor.html", "_blank");
-  }
-
   function loadCodeEditorModules() {
     try {
       const raw = localStorage.getItem(EDITOR_STORAGE_KEY);
@@ -722,7 +738,6 @@
     } catch (e) {
       codeEditorModules = [];
     }
-    // Filter selected IDs that still exist
     selectedCodeModuleIds = selectedCodeModuleIds.filter(
       id => codeEditorModules.some(m => m.id === id)
     );
@@ -731,7 +746,6 @@
 
   function renderSavedCodeModules() {
     if (!savedCodeModulesContainer) return;
-
     if (codeEditorModules.length === 0) {
       savedCodeModulesContainer.innerHTML = "";
       return;
@@ -750,7 +764,7 @@
             <input type="checkbox" ${included ? "checked" : ""} onchange="toggleCodeModule('${m.id}', this.checked)" />
             <div class="saved-mod-info">
               <div class="saved-mod-name">📝 ${escapeHtml(m.name)}</div>
-              <div class="saved-mod-meta">${fileCount} file(s) · saved ${formatRelativeTime(m.createdAt)}</div>
+              <div class="saved-mod-meta">${fileCount} file(s) · ${formatRelativeTime(m.createdAt)}</div>
             </div>
             <button type="button" class="saved-mod-del" onclick="event.preventDefault();deleteCodeModule('${m.id}')" title="Delete">✕</button>
           </label>
@@ -777,44 +791,27 @@
     showToast("Module deleted");
   };
 
-  function formatRelativeTime(ts) {
-    if (!ts) return "just now";
-    const diff = Date.now() - ts;
-    if (diff < 60000) return "just now";
-    if (diff < 3600000) return Math.floor(diff / 60000) + "m ago";
-    if (diff < 86400000) return Math.floor(diff / 3600000) + "h ago";
-    return Math.floor(diff / 86400000) + "d ago";
-  }
-
   async function convertCodeModulesToZips() {
     if (selectedCodeModuleIds.length === 0) return [];
-
     const results = [];
     for (const moduleId of selectedCodeModuleIds) {
       const mod = codeEditorModules.find(m => m.id === moduleId);
       if (!mod) continue;
-
       try {
         const zip = new JSZip();
         let fileCount = 0;
-
         for (const [path, content] of Object.entries(mod.files || {})) {
           if (path.endsWith("/.gitkeep")) continue;
           zip.file(path, content || "");
           fileCount++;
         }
-
-        if (fileCount === 0) {
-          console.warn("Module has no files:", mod.name);
-          continue;
-        }
+        if (fileCount === 0) continue;
 
         const base64 = await zip.generateAsync({
           type: "base64",
           compression: "DEFLATE",
           compressionOptions: { level: 6 },
         });
-
         const size = Math.floor((base64.length * 3) / 4);
 
         results.push({
@@ -831,11 +828,125 @@
     return results;
   }
 
-  // Initial load + refresh on focus (user returns from editor tab)
+  // ═══════════════════════════════════════════════════════════
+  // SITE EDITOR (offline bundle)
+  // ═══════════════════════════════════════════════════════════
+  const SITE_STORAGE_KEY = "builder_site_drafts";
+  const savedSitesContainer = document.getElementById("savedSites");
+  let siteDrafts = [];
+  let selectedSiteId = null;
+
+  function openSiteEditor() {
+    window.open("site-editor.html", "_blank");
+  }
+
+  function loadSiteDrafts() {
+    try {
+      const raw = localStorage.getItem(SITE_STORAGE_KEY);
+      siteDrafts = raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      siteDrafts = [];
+    }
+
+    const savedSelected = localStorage.getItem("builder_site_selected");
+    if (savedSelected && siteDrafts.some(s => s.id === savedSelected)) {
+      selectedSiteId = savedSelected;
+    } else if (siteDrafts.length > 0 && !offlineZipBase64) {
+      selectedSiteId = siteDrafts[siteDrafts.length - 1].id;
+    } else {
+      selectedSiteId = null;
+    }
+    renderSavedSites();
+  }
+
+  function renderSavedSites() {
+    if (!savedSitesContainer) return;
+    if (siteDrafts.length === 0) {
+      savedSitesContainer.innerHTML = "";
+      return;
+    }
+
+    savedSitesContainer.innerHTML = `
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">
+        <strong style="color:var(--accent-2);">🌐 Saved sites from Site Editor</strong>
+      </div>
+      ${siteDrafts.map(s => {
+        const fileCount = Object.keys(s.files || {}).filter(p => !p.endsWith(".gitkeep")).length;
+        const selected = s.id === selectedSiteId;
+        return `
+          <label class="saved-mod-item ${selected ? "checked" : ""}">
+            <input type="radio" name="selectedSite" ${selected ? "checked" : ""} onchange="selectSite('${s.id}')" />
+            <div class="saved-mod-info">
+              <div class="saved-mod-name">🌐 ${escapeHtml(s.name)}</div>
+              <div class="saved-mod-meta">${fileCount} file(s) · ${formatRelativeTime(s.createdAt)}</div>
+            </div>
+            <button type="button" class="saved-mod-del" onclick="event.preventDefault();deleteSite('${s.id}')" title="Delete">✕</button>
+          </label>
+        `;
+      }).join("")}
+    `;
+  }
+
+  window.selectSite = function(id) {
+    selectedSiteId = id;
+    localStorage.setItem("builder_site_selected", id);
+    // Clear uploaded ZIP (mutually exclusive)
+    if (offlineZipBase64) {
+      clearZipUpload();
+      showToast("Editor draft selected — ZIP cleared");
+    }
+    renderSavedSites();
+  };
+
+  window.deleteSite = function(id) {
+    if (!confirm("Delete this site draft?")) return;
+    siteDrafts = siteDrafts.filter(s => s.id !== id);
+    localStorage.setItem(SITE_STORAGE_KEY, JSON.stringify(siteDrafts));
+    if (selectedSiteId === id) selectedSiteId = null;
+    renderSavedSites();
+    showToast("Site deleted");
+  };
+
+  async function siteDraftToZip(site) {
+    const zip = new JSZip();
+    let fileCount = 0;
+    for (const [path, content] of Object.entries(site.files || {})) {
+      if (path.endsWith("/.gitkeep")) continue;
+      zip.file(path, content || "");
+      fileCount++;
+    }
+    if (fileCount === 0) throw new Error("Site has no files");
+    if (!site.files["index.html"]) throw new Error("Site must have index.html");
+
+    const base64 = await zip.generateAsync({
+      type: "base64",
+      compression: "DEFLATE",
+      compressionOptions: { level: 6 },
+    });
+    const size = Math.floor((base64.length * 3) / 4);
+    return { base64, size };
+  }
+
+  function formatRelativeTime(ts) {
+    if (!ts) return "just now";
+    const diff = Date.now() - ts;
+    if (diff < 60000) return "just now";
+    if (diff < 3600000) return Math.floor(diff / 60000) + "m ago";
+    if (diff < 86400000) return Math.floor(diff / 3600000) + "h ago";
+    return Math.floor(diff / 86400000) + "d ago";
+  }
+
+  // Load both module and site lists + auto refresh
   loadCodeEditorModules();
-  window.addEventListener("focus", loadCodeEditorModules);
-  // Also refresh periodically (for multi-tab UX)
-  setInterval(loadCodeEditorModules, 3000);
+  loadSiteDrafts();
+  window.addEventListener("focus", () => {
+    loadCodeEditorModules();
+    loadSiteDrafts();
+  });
+  setInterval(() => {
+    loadCodeEditorModules();
+    loadSiteDrafts();
+  }, 3000);
 
   // ═══════════════════════════════════════════════════════════
   // SUBMIT
@@ -856,7 +967,11 @@
 
     // Mode-specific validation
     if (appMode === "offline") {
-      if (!offlineZipBase64) return showErr("Offline mode requires a ZIP file");
+      const hasZip = !!offlineZipBase64;
+      const hasDraft = !!selectedSiteId;
+      if (!hasZip && !hasDraft) {
+        return showErr("Offline mode requires a ZIP file or a saved site draft");
+      }
     } else if (appMode === "online") {
       if (!/^https:\/\/.+/.test(websiteUrl)) return showErr("Online mode requires a valid https:// URL");
     } else {
@@ -875,7 +990,7 @@
       return showErr("🔐 Custom modules need admin login. <a href='admin-login.html'>Login here →</a>");
     }
 
-    // Convert code-editor modules to ZIPs
+    // ⭐ Convert code modules to ZIPs
     let codeModuleZips = [];
     if (selectedCodeModuleIds.length > 0) {
       showToast("Converting code modules…");
@@ -886,7 +1001,25 @@
       }
     }
 
-    // Merge modules
+    // ⭐ Handle offline bundle: prefer uploaded ZIP, fallback to site draft
+    let finalZipBase64 = offlineZipBase64;
+    let finalZipName = offlineZipName;
+
+    if (appMode !== "online" && !finalZipBase64 && selectedSiteId) {
+      const site = siteDrafts.find(s => s.id === selectedSiteId);
+      if (site) {
+        try {
+          showToast("Converting site draft…");
+          const result = await siteDraftToZip(site);
+          finalZipBase64 = result.base64;
+          finalZipName = site.name + ".zip";
+        } catch (err) {
+          return showErr("Site draft error: " + err.message);
+        }
+      }
+    }
+
+    // Merge all modules
     const allModules = [
       ...uploadedModules.map((m, i) => ({
         id: m.id,
@@ -899,14 +1032,14 @@
 
     // Ensure exactly one main
     if (allModules.length > 0) {
-      const mainCount = allModules.filter(m => m.isMain).length;
-      if (mainCount === 0) allModules[0].isMain = true;
-      if (mainCount > 1) {
+      const mains = allModules.filter(m => m.isMain);
+      if (mains.length === 0) allModules[0].isMain = true;
+      if (mains.length > 1) {
         let first = true;
         allModules.forEach(m => {
           if (m.isMain) {
-            if (first) { first = false; }
-            else { m.isMain = false; }
+            if (first) first = false;
+            else m.isMain = false;
           }
         });
       }
@@ -917,8 +1050,8 @@
       websiteUrl: appMode === "offline" ? "https://example.com" : websiteUrl,
       packageName, versionName, versionCode, themeColor,
       iconBase64: iconImg.dataset.base64 || null,
-      offlineZipBase64: appMode === "online" ? null : (offlineZipBase64 || null),
-      offlineZipName: appMode === "online" ? null : (offlineZipName || null),
+      offlineZipBase64: appMode === "online" ? null : (finalZipBase64 || null),
+      offlineZipName: appMode === "online" ? null : (finalZipName || null),
       orientation: form.orientation.value,
       commonModules: Array.from(selectedCommonModules),
       modules: allModules,
@@ -949,7 +1082,7 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // Toast helper (if not in app.js)
+  // Toast helper
   let _toastTimer = null;
   function showToast(message, duration = 2000) {
     let toast = document.getElementById("toast");
